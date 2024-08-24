@@ -17,6 +17,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -647,5 +648,31 @@ class DeezerApi {
                 put("RECOMMENDATION_COUNTRY", country)
             }
         )
+    }
+
+    fun lyrics(id: String): JsonObject {
+        val request = Request.Builder()
+            .url("https://auth.deezer.com/login/arl?jo=p&rto=c&i=c")
+            .post("".toRequestBody())
+            .headers(Headers.headersOf("Cookie", "arl=$arl; sid=$sid"))
+            .build()
+        val response = clientNP.newCall(request).execute()
+        val jsonObject = json.decodeFromString<JsonObject>(response.body.string())
+
+        val jwt = jsonObject["jwt"]?.jsonPrimitive?.content
+        val params = buildJsonObject {
+            put("operationName", "SynchronizedTrackLyrics")
+            put("query", "query SynchronizedTrackLyrics(\$trackId: String!) {\n  track(trackId: \$trackId) {\n    id\n    isExplicit\n    lyrics {\n      id\n      copyright\n      text\n      writers\n      synchronizedLines {\n        lrcTimestamp\n        line\n        milliseconds\n        duration\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}")
+            putJsonObject("variables") {
+                put("trackId", id)
+            }
+        }
+        val pipeRequest = Request.Builder()
+            .url("https://pipe.deezer.com/api")
+            .post(json.encodeToString(params).toRequestBody())
+            .headers(Headers.headersOf("Authorization", "Bearer $jwt", "Content-Type", "application/json"))
+            .build()
+        val pipeResponse = clientNP.newCall(pipeRequest).execute()
+        return json.decodeFromString<JsonObject>(pipeResponse.body.string())
     }
 }

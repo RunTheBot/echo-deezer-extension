@@ -6,6 +6,7 @@ import dev.brahmkshatriya.echo.common.clients.ExtensionClient
 import dev.brahmkshatriya.echo.common.clients.HomeFeedClient
 import dev.brahmkshatriya.echo.common.clients.LibraryClient
 import dev.brahmkshatriya.echo.common.clients.LoginClient
+import dev.brahmkshatriya.echo.common.clients.LyricsClient
 import dev.brahmkshatriya.echo.common.clients.PlaylistClient
 import dev.brahmkshatriya.echo.common.clients.SearchClient
 import dev.brahmkshatriya.echo.common.clients.ShareClient
@@ -15,6 +16,8 @@ import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.ClientException
+import dev.brahmkshatriya.echo.common.models.Lyric
+import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.common.models.MediaItemsContainer
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.QuickSearchItem
@@ -39,6 +42,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -47,7 +51,7 @@ import okhttp3.Request
 import java.util.Locale
 
 class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient, ArtistClient,
-    PlaylistClient, ShareClient, LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
+    PlaylistClient, LyricsClient, ShareClient, LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
     LibraryClient {
 
     private val json = Json {
@@ -491,6 +495,26 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override fun getMediaItems(track: Track): PagedData<MediaItemsContainer> = getMediaItems(track.artists.first())
+
+    //<============= Lyrics =============>
+
+    override suspend fun loadLyrics(small: Lyrics) = small
+
+    override fun searchTrackLyrics(clientId: String, track: Track) = PagedData.Single {
+        val jsonObject = api.lyrics(track.id)
+        val dataObject = jsonObject["data"]!!.jsonObject
+        val trackObject = dataObject["track"]!!.jsonObject
+        val lyricsObject = trackObject["lyrics"]!!.jsonObject
+        val lyricsId = lyricsObject["id"]?.jsonPrimitive?.content ?: ""
+        val linesArray = lyricsObject["synchronizedLines"]!!.jsonArray
+        val lyrics = linesArray.map { lineObj ->
+            val line = lineObj.jsonObject["line"]?.jsonPrimitive?.content ?: ""
+            val start = lineObj.jsonObject["milliseconds"]?.jsonPrimitive?.int ?: 0
+            val end = lineObj.jsonObject["duration"]?.jsonPrimitive?.int ?: 0
+            Lyric(line, start.toLong(), start.toLong() + end.toLong() )
+        }
+        listOf(Lyrics(lyricsId, track.title, lyrics = lyrics))
+    }
 
     //<============= Album =============>
 
