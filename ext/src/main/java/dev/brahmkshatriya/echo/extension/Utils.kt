@@ -12,14 +12,12 @@ import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.coroutines.executeAsync
-import okhttp3.internal.http2.StreamResetException
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
-import java.math.BigInteger
 import java.security.MessageDigest
-import java.util.Arrays
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
@@ -29,29 +27,34 @@ object Utils {
     private const val SECRET = "g4el58wc0zvf9na1"
     private val secretIvSpec = IvParameterSpec(byteArrayOf(0,1,2,3,4,5,6,7))
 
+    private val cipherCache = ConcurrentHashMap<String, Cipher>()
+
     private fun bitwiseXor(firstVal: Char, secondVal: Char, thirdVal: Char): Char {
-        return (BigInteger(byteArrayOf(firstVal.code.toByte())) xor
-                BigInteger(byteArrayOf(secondVal.code.toByte())) xor
-                BigInteger(byteArrayOf(thirdVal.code.toByte()))).toByte().toInt().toChar()
+        return (firstVal.code xor secondVal.code xor thirdVal.code).toChar()
     }
 
     fun createBlowfishKey(trackId: String): String {
         val trackMd5Hex = trackId.toMD5()
-        var blowfishKey = ""
+        val blowfishKey = StringBuilder()
 
         for (i in 0..15) {
             val nextChar = bitwiseXor(trackMd5Hex[i], trackMd5Hex[i + 16], SECRET[i])
-            blowfishKey += nextChar
+            blowfishKey.append(nextChar)
         }
 
-        return blowfishKey
+        return blowfishKey.toString()
+    }
+
+    private fun createCipher(blowfishKey: String): Cipher {
+        return Cipher.getInstance("BLOWFISH/CBC/NoPadding").apply {
+            val secretKeySpec = SecretKeySpec(blowfishKey.toByteArray(), "Blowfish")
+            init(Cipher.DECRYPT_MODE, secretKeySpec, secretIvSpec)
+        }
     }
 
     fun decryptBlowfish(chunk: ByteArray, blowfishKey: String): ByteArray {
-        val secretKeySpec = SecretKeySpec(blowfishKey.toByteArray(), "Blowfish")
-        val thisTrackCipher = Cipher.getInstance("BLOWFISH/CBC/NoPadding")
-        thisTrackCipher.init(Cipher.DECRYPT_MODE, secretKeySpec, secretIvSpec)
-        return thisTrackCipher.doFinal(chunk)
+        val cipher = cipherCache.computeIfAbsent(blowfishKey) { createCipher(it) }
+        return cipher.doFinal(chunk)
     }
 
     fun getContentLength(url: String, client: OkHttpClient): Long {
@@ -65,11 +68,7 @@ object Utils {
 }
 
 private fun bytesToHex(bytes: ByteArray): String {
-    var hexString = ""
-    for (byte in bytes) {
-        hexString += String.format("%02X", byte)
-    }
-    return hexString
+    return bytes.joinToString("") { String.format("%02X", it) }
 }
 
 fun String.toMD5(): String {
@@ -79,14 +78,17 @@ fun String.toMD5(): String {
 
 @Suppress("NewApi")
 @OptIn(ExperimentalCoroutinesApi::class)
-fun getByteStreamAudio(scope: CoroutineScope, streamable: Streamable, client: OkHttpClient): StreamableAudio {
+fun getByteStreamAudio(
+    scope: CoroutineScope,
+    streamable: Streamable,
+    client: OkHttpClient
+): StreamableAudio {
     val url = streamable.id
     val contentLength = Utils.getContentLength(url, client)
     val key = streamable.extra["key"]!!
 
     val request = Request.Builder().url(url).build()
     val pipedInputStream = PipedInputStream()
-    val pipedOutputStream = PipedOutputStream(pipedInputStream)
 
     val clientWithTimeouts = client.newBuilder()
         .readTimeout(60, TimeUnit.SECONDS)
@@ -98,54 +100,59 @@ fun getByteStreamAudio(scope: CoroutineScope, streamable: Streamable, client: Ok
 
     scope.launch(Dispatchers.IO) {
         retry(3) {
-            val response = clientWithTimeouts.newCall(request).executeAsync()
-            val byteStream = response.body.byteStream().buffered()
+            PipedOutputStream(pipedInputStream).use { pipedOutputStream ->
+                clientWithTimeouts.newCall(request).executeAsync().use { response ->
+                    response.body.byteStream().buffered().use { byteStream ->
+                        try {
+                            val buffer = ByteArray(2048)
+                            var totalRead: Int
+                            var counter = 0
 
-            try {
-                val buffer = ByteArray(2048)
-                var totalRead: Int
-                var counter = 0
+                            while (true) {
+                                totalRead = 0
+                                while (totalRead < 2048) {
+                                    val bytesRead =
+                                        byteStream.read(buffer, totalRead, 2048 - totalRead)
+                                    if (bytesRead == -1) break
 
-                while (true) {
-                    totalRead = 0
-                    while (totalRead < 2048) {
-                        val bytesRead = byteStream.read(buffer, totalRead, 2048 - totalRead)
-                        if (bytesRead == -1) break
+                                    totalRead += bytesRead
+                                }
 
-                        totalRead += bytesRead
-                    }
+                                if (totalRead == 0) break
 
-                    if (totalRead == 0) break
+                                if (totalRead == 2048) {
+                                    if (counter % 3 == 0) {
+                                        val decryptedChunk = Utils.decryptBlowfish(buffer, key)
+                                        pipedOutputStream.write(decryptedChunk)
+                                    } else {
+                                        pipedOutputStream.write(buffer, 0, 2048)
+                                    }
+                                } else {
+                                    if (counter % 3 == 0) {
+                                        val partialBuffer = buffer.copyOf(totalRead)
+                                        val decryptedChunk =
+                                            Utils.decryptBlowfish(partialBuffer, key)
+                                        pipedOutputStream.write(decryptedChunk, 0, totalRead)
+                                    } else {
+                                        pipedOutputStream.write(buffer, 0, totalRead)
+                                    }
+                                }
 
-                    if (totalRead == 2048) {
-                        if (counter % 3 == 0) {
-                            val decryptedChunk = Utils.decryptBlowfish(buffer, key)
-                            pipedOutputStream.write(decryptedChunk)
-                        } else {
-                            pipedOutputStream.write(buffer, 0, 2048)
+                                counter++
+                                pipedOutputStream.flush()
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        } finally {
+                            try {
+                                response.close()
+                                byteStream.close()
+                                pipedOutputStream.close()
+                            } catch (e: IOException) {
+                                e.printStackTrace()
+                            }
                         }
-                    } else {
-                        if (counter % 3 == 0) {
-                            val partialBuffer = buffer.copyOf(totalRead)
-                            val decryptedChunk = Utils.decryptBlowfish(partialBuffer, key)
-                            pipedOutputStream.write(decryptedChunk, 0, totalRead)
-                        } else {
-                            pipedOutputStream.write(buffer, 0, totalRead)
-                        }
                     }
-
-                    counter++
-                    pipedOutputStream.flush()
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                try {
-                    response.close()
-                    byteStream.close()
-                    pipedOutputStream.close()
-                } catch (e: IOException) {
-                    e.printStackTrace()
                 }
             }
         }
@@ -157,66 +164,63 @@ fun getByteStreamAudio(scope: CoroutineScope, streamable: Streamable, client: Ok
     )
 }
 
-suspend fun retry(times: Int, block: suspend () -> Unit) {
+suspend fun retry(times: Int, delayMillis: Long = 1000, block: suspend () -> Unit) {
     repeat(times) {
         try {
             block()
             return
-        } catch (e: StreamResetException) {
-            if (it == times - 1) {
-                throw e
-            }
-            delay(1000)
+        } catch (e: Exception) {
+            if (it == times - 1) throw e
+            delay(delayMillis)
         }
     }
 }
 
-@Suppress("NewApi")
+
+@Suppress("NewApi", "GetInstance")
 fun generateTrackUrl(trackId: String, md5Origin: String, mediaVersion: String, quality: Int): String {
-    val magic = 164
-    val step1 = ByteArrayOutputStream()
-    step1.write(md5Origin.toByteArray())
-    step1.write(164)
-    step1.write(quality.toString().toByteArray())
-    step1.write(magic)
-    step1.write(trackId.toByteArray())
-    step1.write(magic)
-    step1.write(mediaVersion.toByteArray())
+    val magicByte = 164
+    val aesKey = "jo6aey6haid2Teih".toByteArray()
+    val keySpec = SecretKeySpec(aesKey, "AES")
 
-    val md5 = MessageDigest.getInstance("MD5")
-    md5.update(step1.toByteArray())
-    val digest = md5.digest()
-    val md5hex = bytesToHexTrack(digest).lowercase()
-
-    val step2 = ByteArrayOutputStream()
-    step2.write(md5hex.toByteArray())
-    step2.write(magic)
-    step2.write(step1.toByteArray())
-    step2.write(magic)
-
-    while (step2.size()%16 > 0) step2.write(46)
-
-    val cipher = Cipher.getInstance("AES/ECB/NoPadding")
-    val key = SecretKeySpec("jo6aey6haid2Teih".toByteArray(), "AES")
-    cipher.init(Cipher.ENCRYPT_MODE, key)
-
-    val step3 = StringBuilder()
-    for (i in 0 until step2.size() / 16) {
-        val b = Arrays.copyOfRange(step2.toByteArray(), i*16, (i+1)*16)
-        step3.append(bytesToHexTrack(cipher.doFinal(b)).lowercase())
+    val step1 = ByteArrayOutputStream().apply {
+        write(md5Origin.toByteArray())
+        write(magicByte)
+        write(quality.toString().toByteArray())
+        write(magicByte)
+        write(trackId.toByteArray())
+        write(magicByte)
+        write(mediaVersion.toByteArray())
     }
 
-    val url = "https://e-cdns-proxy-" + md5Origin[0] + ".dzcdn.net/mobile/1/" + step3.toString()
-    return url
+    val md5Digest = MessageDigest.getInstance("MD5").digest(step1.toByteArray())
+    val md5hex = md5Digest.joinToString("") { "%02x".format(it) }
+
+    val step2 = ByteArrayOutputStream().apply {
+        write(md5hex.toByteArray())
+        write(magicByte)
+        write(step1.toByteArray())
+        write(magicByte)
+    }
+
+    while (step2.size() % 16 != 0) {
+        step2.write(46)
+    }
+
+    val cipher = Cipher.getInstance("AES/ECB/NoPadding").apply {
+        init(Cipher.ENCRYPT_MODE, keySpec)
+    }
+
+    val encryptedHex = StringBuilder()
+    val step2Bytes = step2.toByteArray()
+    for (i in step2Bytes.indices step 16) {
+        val block = step2Bytes.copyOfRange(i, i + 16)
+        encryptedHex.append(cipher.doFinal(block).joinToString("") { "%02x".format(it) })
+    }
+
+    return "https://e-cdns-proxy-${md5Origin[0]}.dzcdn.net/mobile/1/$encryptedHex"
 }
 
 private fun bytesToHexTrack(bytes: ByteArray): String {
-    val HEX_ARRAY = "0123456789ABCDEF".toCharArray()
-    val hexChars = CharArray(bytes.size * 2)
-    for (j in bytes.indices) {
-        val v = bytes[j].toInt() and 0xFF
-        hexChars[j * 2] = HEX_ARRAY[v ushr 4]
-        hexChars[j * 2 + 1] = HEX_ARRAY[v and 0x0F]
-    }
-    return String(hexChars)
+    return bytes.joinToString("") { "%02x".format(it) }
 }
