@@ -501,19 +501,23 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     override suspend fun loadLyrics(small: Lyrics) = small
 
     override fun searchTrackLyrics(clientId: String, track: Track) = PagedData.Single {
-        val jsonObject = api.lyrics(track.id)
-        val dataObject = jsonObject["data"]!!.jsonObject
-        val trackObject = dataObject["track"]!!.jsonObject
-        val lyricsObject = trackObject["lyrics"]!!.jsonObject
-        val lyricsId = lyricsObject["id"]?.jsonPrimitive?.content ?: ""
-        val linesArray = lyricsObject["synchronizedLines"]!!.jsonArray
-        val lyrics = linesArray.map { lineObj ->
-            val line = lineObj.jsonObject["line"]?.jsonPrimitive?.content ?: ""
-            val start = lineObj.jsonObject["milliseconds"]?.jsonPrimitive?.int ?: 0
-            val end = lineObj.jsonObject["duration"]?.jsonPrimitive?.int ?: 0
-            Lyric(line, start.toLong(), start.toLong() + end.toLong() )
+        try {
+            val jsonObject = api.lyrics(track.id)
+            val dataObject = jsonObject["data"]!!.jsonObject
+            val trackObject = dataObject["track"]!!.jsonObject
+            val lyricsObject = trackObject["lyrics"]!!.jsonObject
+            val lyricsId = lyricsObject["id"]?.jsonPrimitive?.content ?: ""
+            val linesArray = lyricsObject["synchronizedLines"]!!.jsonArray
+            val lyrics = linesArray.map { lineObj ->
+                val line = lineObj.jsonObject["line"]?.jsonPrimitive?.content ?: ""
+                val start = lineObj.jsonObject["milliseconds"]?.jsonPrimitive?.int ?: 0
+                val end = lineObj.jsonObject["duration"]?.jsonPrimitive?.int ?: 0
+                Lyric(line, start.toLong(), start.toLong() + end.toLong())
+            }
+            listOf(Lyrics(lyricsId, track.title, lyrics = lyrics))
+        } catch (e: Exception) {
+            emptyList()
         }
-        listOf(Lyrics(lyricsId, track.title, lyrics = lyrics))
     }
 
     //<============= Album =============>
