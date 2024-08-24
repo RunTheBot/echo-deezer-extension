@@ -220,7 +220,3 @@ fun generateTrackUrl(trackId: String, md5Origin: String, mediaVersion: String, q
 
     return "https://e-cdns-proxy-${md5Origin[0]}.dzcdn.net/mobile/1/$encryptedHex"
 }
-
-private fun bytesToHexTrack(bytes: ByteArray): String {
-    return bytes.joinToString("") { "%02x".format(it) }
-}
