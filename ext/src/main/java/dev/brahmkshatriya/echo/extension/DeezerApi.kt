@@ -17,6 +17,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import okhttp3.Headers
 import okhttp3.HttpUrl
@@ -316,19 +317,18 @@ class DeezerApi {
         val requestBody = json.encodeToString(
             buildJsonObject {
                 put("license_token", licenseToken)
-                put("media", buildJsonArray {
-                    buildJsonObject {
+                putJsonArray("media") {
+                    add(buildJsonObject {
                         put("type", "FULL")
-                        put("formats", buildJsonArray {
-                            buildJsonObject {
+                        putJsonArray("formats") {
+                            add(buildJsonObject {
                                 put("cipher", "BF_CBC_STRIPE")
                                 put("format", "MP3_MISC")
-                            }
+                            })
                         }
-                        )
-                    }
-                })
-                put("track_tokens", buildJsonArray { add(track.extras["TRACK_TOKEN"])})
+                    })
+                }
+                putJsonArray("track_tokens") { add(track.extras["TRACK_TOKEN"]) }
             }
         ).toRequestBody("application/json; charset=utf-8".toMediaType())
 
