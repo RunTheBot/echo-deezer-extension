@@ -402,6 +402,34 @@ class DeezerApi {
         return json.decodeFromString<JsonObject>(jsonData)
     }
 
+    suspend fun setSearchHistory(query: String) {
+        callApi(
+            method = "user.addEntryInSearchHistory",
+            params = buildJsonObject {
+                putJsonObject("ENTRY") {
+                    put("query", query)
+                    put("type", "query")
+                }
+            }
+        )
+    }
+
+    suspend fun getSearchHistory(): JsonObject {
+        val jsonData = callApi(
+            method = "deezer.userMenu"
+        )
+        return json.decodeFromString<JsonObject>(jsonData)
+    }
+
+    suspend fun deleteSearchHistory() {
+        callApi(
+            method = "user.clearSearchHistory",
+            params = buildJsonObject {
+                put("USER_ID", userId)
+            }
+        )
+    }
+
     suspend fun track(tracks: Array<Track>): JsonObject {
         val jsonData = callApi(
             method = "song.getListData",

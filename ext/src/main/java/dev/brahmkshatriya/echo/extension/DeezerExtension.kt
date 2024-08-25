@@ -89,6 +89,12 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             "Enables logging to deezer",
             false
         ),
+        SettingSwitch(
+            "Enable Search History",
+            "history",
+            "Enables the search history",
+            true
+        ),
         SettingCategory(
             "Language & Country",
             "langcount",
@@ -140,6 +146,9 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     private val log
         get() = settings?.getBoolean("log") ?: false
+
+    private val history
+        get() = settings?.getBoolean("history") ?: true
 
     private val credentials: DeezerCredentials
         get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
@@ -329,19 +338,35 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     //<============= Search =============>
 
-    override suspend fun quickSearch(query: String?) = query?.let {
-        runCatching {
-            val jsonObject = api.searchSuggestions(it)
-            val resultObject = jsonObject["results"]?.jsonObject
-            val suggestionArray = resultObject?.get("SUGGESTION")?.jsonArray
-            suggestionArray?.mapNotNull { item ->
-                val queryItem = item.jsonObject["QUERY"]?.jsonPrimitive?.content
-                queryItem?.let { QuickSearchItem.SearchQueryItem(it, false) }
+    override suspend fun quickSearch(query: String?) =
+        if (query?.isEmpty() == true) {
+            val jsonObject = api.getSearchHistory()
+            val resultObject = jsonObject["results"]!!.jsonObject
+            val searchObject = resultObject["SEARCH_HISTORY"]?.jsonObject
+            val dataArray = searchObject?.get("data")?.jsonArray
+            dataArray?.mapNotNull { item ->
+                val queryItem = item.jsonObject["query"]?.jsonPrimitive?.content
+                queryItem?.let { QuickSearchItem.SearchQueryItem(it, true) }
             } ?: emptyList()
-        }.getOrElse {
-            emptyList()
+        } else {
+            query?.let {
+                runCatching {
+                    val jsonObject = api.searchSuggestions(it)
+                    val resultObject = jsonObject["results"]?.jsonObject
+                    val suggestionArray = resultObject?.get("SUGGESTION")?.jsonArray
+                    suggestionArray?.mapNotNull { item ->
+                        val queryItem = item.jsonObject["QUERY"]?.jsonPrimitive?.content
+                        queryItem?.let { QuickSearchItem.SearchQueryItem(it, false) }
+                    } ?: emptyList()
+                }.getOrElse {
+                    emptyList()
+                }
+            } ?: emptyList()
         }
-    } ?: emptyList()
+
+    override suspend fun deleteSearchHistory(query: QuickSearchItem.SearchQueryItem) {
+        api.deleteSearchHistory()
+    }
 
     private var oldSearch: Pair<String, List<MediaItemsContainer>>? = null
 
@@ -349,6 +374,9 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         if (arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
         query ?: return@Single browseFeed()
 
+        if (history) {
+            api.setSearchHistory(query)
+        }
         oldSearch?.takeIf { it.first == query && (tab == null || tab.id == "All") }?.second?.let {
             return@Single it
         }
@@ -411,10 +439,6 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             dataArray?.toMediaItemsContainer(name.lowercase().capitalize(Locale.ROOT))
         }
         return listOf(Tab("All", "All")) + tabs
-    }
-
-    override suspend fun deleteSearchHistory(query: QuickSearchItem.SearchQueryItem) {
-        TODO("Not yet implemented")
     }
 
     //<============= Play =============>
