@@ -83,6 +83,12 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             "Use proxy to prevent GEO-Blocking",
             false
         ),
+        SettingSwitch(
+            "Enable Logging",
+            "log",
+            "Enables logging to deezer",
+            false
+        ),
         SettingCategory(
             "Language & Country",
             "langcount",
@@ -131,6 +137,9 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     private val quality
         get() = settings?.getString("quality") ?: "320"
+
+    private val log
+        get() = settings?.getBoolean("log") ?: false
 
     private val credentials: DeezerCredentials
         get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
@@ -479,6 +488,9 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             }
         }
 
+        if (log) {
+            api.log(track)
+        }
         Track(
             id = track.id,
             title = track.title,
@@ -551,8 +563,19 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             val resultsObject = jsonObject["results"]!!.jsonObject
             val songsObject = resultsObject["SONGS"]!!.jsonObject
             val dataArray = songsObject["data"]!!.jsonArray
-            val data = dataArray.map { song ->
-                song.jsonObject.toTrack()
+            val data = dataArray.mapIndexed { index, song ->
+                val currentTrack = song.jsonObject.toTrack()
+                val nextTrack = dataArray.getOrNull(index + 1)?.jsonObject?.toTrack()
+                val nextTrackId = nextTrack?.id
+                Track(
+                    id = currentTrack.id,
+                    title = currentTrack.title,
+                    cover = currentTrack.cover,
+                    duration = currentTrack.duration,
+                    releaseDate = currentTrack.releaseDate,
+                    artists = currentTrack.artists,
+                    extras = currentTrack.extras.plus(mapOf(Pair("NEXT", nextTrackId ?: ""), Pair("album_id", album.id)))
+                )
             }
             data
         }
@@ -582,8 +605,19 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         val resultsObject = jsonObject["results"]!!.jsonObject
         val songsObject = resultsObject["SONGS"]!!.jsonObject
         val dataArray = songsObject["data"]!!.jsonArray
-        val data = dataArray.map { song ->
-            song.jsonObject.toTrack()
+        val data = dataArray.mapIndexed { index, song ->
+            val currentTrack = song.jsonObject.toTrack()
+            val nextTrack = dataArray.getOrNull(index + 1)?.jsonObject?.toTrack()
+            val nextTrackId = nextTrack?.id
+            Track(
+                id = currentTrack.id,
+                title = currentTrack.title,
+                cover = currentTrack.cover,
+                duration = currentTrack.duration,
+                releaseDate = currentTrack.releaseDate,
+                artists = currentTrack.artists,
+                extras = currentTrack.extras.plus(mapOf(Pair("NEXT", nextTrackId ?: ""), Pair("playlist_id", playlist.id)))
+            )
         }
         data
     }

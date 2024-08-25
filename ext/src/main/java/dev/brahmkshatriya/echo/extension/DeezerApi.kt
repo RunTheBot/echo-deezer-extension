@@ -31,6 +31,7 @@ import java.math.BigInteger
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.security.MessageDigest
+import java.util.UUID
 import java.util.zip.GZIPInputStream
 
 class DeezerApi {
@@ -674,5 +675,64 @@ class DeezerApi {
             .build()
         val pipeResponse = clientNP.newCall(pipeRequest).execute()
         return json.decodeFromString<JsonObject>(pipeResponse.body.string())
+    }
+
+    suspend fun log(track: Track) {
+        val id = track.id
+        val next = track.extras["NEXT"]
+        val ctxtT: String
+        val ctxtId = when {
+            !track.extras["album_id"].isNullOrEmpty() -> {
+                ctxtT = "album_page"
+                track.extras["album_id"]
+            }
+            !track.extras["playlist_id"].isNullOrEmpty() -> {
+                ctxtT = "playlist_page"
+                track.extras["playlist_id"]
+            }
+            else -> {
+                ctxtT = ""
+                ""
+            }
+        }
+        callApi(
+            method = "log.listen",
+            params = buildJsonObject {
+                putJsonObject("next_media") {
+                    putJsonObject("media") {
+                        put("id", next)
+                        put("type", "song")
+                    }
+                }
+                putJsonObject("params") {
+                    putJsonObject("ctxt") {
+                        put("id", ctxtId)
+                        put("t", ctxtT)
+                    }
+                    putJsonObject("dev") {
+                        put("t", 0)
+                        put("v", "10020240822130111")
+                    }
+                    put("is_shuffle", false)
+                    putJsonArray("ls") {}
+                    put("lt", 1)
+                    putJsonObject("media") {
+                        put("format", "MP3_128")
+                        put("id", id)
+                        put("type", "song")
+                    }
+                    putJsonObject("payload") {}
+                    putJsonObject("stat") {
+                        put("pause", 0)
+                        put("seek", 0)
+                        put("sync", 0)
+                    }
+                    put("stream_id", UUID.randomUUID().toString())
+                    put("timestamp", System.currentTimeMillis() / 1000)
+                    put("ts_listen", System.currentTimeMillis() / 1000)
+                    put("type", 0)
+                }
+            }
+        )
     }
 }
