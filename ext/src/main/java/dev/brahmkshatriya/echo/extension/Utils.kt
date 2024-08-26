@@ -91,11 +91,11 @@ fun getByteStreamAudio(
     val pipedInputStream = PipedInputStream()
 
     val clientWithTimeouts = client.newBuilder()
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
         .connectTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
-        .protocols(listOf(Protocol.HTTP_1_1))
+        .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
         .build()
 
     scope.launch(Dispatchers.IO) {
