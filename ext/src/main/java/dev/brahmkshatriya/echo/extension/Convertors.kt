@@ -19,7 +19,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 import java.util.Date
 
-fun JsonElement.toMediaItemsContainer(
+suspend fun JsonElement.toMediaItemsContainer(
     name: String?
 ): MediaItemsContainer {
     val itemsArray = jsonObject["items"]!!.jsonArray
@@ -30,7 +30,7 @@ fun JsonElement.toMediaItemsContainer(
         }
     )
 }
-fun JsonObject.toMediaItemsContainer(
+suspend fun JsonObject.toMediaItemsContainer(
     name: String?
 ): MediaItemsContainer {
     return MediaItemsContainer.Category(
@@ -39,7 +39,7 @@ fun JsonObject.toMediaItemsContainer(
     )
 }
 
-fun JsonArray.toMediaItemsContainer(
+suspend fun JsonArray.toMediaItemsContainer(
     name: String?
 ): MediaItemsContainer {
     val itemsArray = jsonArray
@@ -51,7 +51,7 @@ fun JsonArray.toMediaItemsContainer(
     )
 }
 
-fun JsonElement.toEchoMediaItem(): EchoMediaItem? {
+suspend fun JsonElement.toEchoMediaItem(): EchoMediaItem? {
     val data = jsonObject["data"]?.jsonObject ?: jsonObject
     val type = data["__TYPE__"]!!.jsonPrimitive.content
     return when {
@@ -131,15 +131,18 @@ fun JsonElement.toAlbum(): Album {
     )
 }
 
-fun JsonElement.toArtist(): Artist {
+suspend fun JsonElement.toArtist(): Artist {
     val data = jsonObject["data"]?.jsonObject ?: jsonObject
     val md5 = data["ART_PICTURE"]?.jsonPrimitive?.content ?: ""
+    val id = data["ART_ID"]?.jsonPrimitive?.content ?: ""
+    val isFollowing = DeezerExtension().isFollowingArtist(id)
     return Artist(
-        id = data["ART_ID"]?.jsonPrimitive?.content ?: "",
+        id = id,
         name = data["ART_NAME"]?.jsonPrimitive?.content ?: "",
         cover = getCover(md5, "artist"),
         description = jsonObject["description"]?.jsonPrimitive?.content ?: "",
         subtitle = jsonObject["subtitle"]?.jsonPrimitive?.content ?: "",
+        isFollowing = isFollowing
     )
 }
 

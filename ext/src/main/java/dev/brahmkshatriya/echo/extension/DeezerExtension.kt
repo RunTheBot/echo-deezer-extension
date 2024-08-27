@@ -2,6 +2,7 @@ package dev.brahmkshatriya.echo.extension
 
 import dev.brahmkshatriya.echo.common.clients.AlbumClient
 import dev.brahmkshatriya.echo.common.clients.ArtistClient
+import dev.brahmkshatriya.echo.common.clients.ArtistFollowClient
 import dev.brahmkshatriya.echo.common.clients.ExtensionClient
 import dev.brahmkshatriya.echo.common.clients.HomeFeedClient
 import dev.brahmkshatriya.echo.common.clients.LibraryClient
@@ -42,6 +43,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -51,8 +53,8 @@ import okhttp3.Request
 import java.util.Locale
 
 class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient, ArtistClient,
-    PlaylistClient, LyricsClient, ShareClient, LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
-    LibraryClient {
+    ArtistFollowClient, PlaylistClient, LyricsClient, ShareClient, LoginClient.WebView.Cookie,
+    LoginClient.UsernamePassword, LoginClient.CustomTextInput, LibraryClient {
 
     private val json = Json {
         isLenient = true
@@ -340,14 +342,24 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     override suspend fun quickSearch(query: String?) =
         if (query?.isEmpty() == true) {
+            val queryList = mutableListOf<QuickSearchItem.SearchQueryItem>()
             val jsonObject = api.getSearchHistory()
             val resultObject = jsonObject["results"]!!.jsonObject
             val searchObject = resultObject["SEARCH_HISTORY"]?.jsonObject
             val dataArray = searchObject?.get("data")?.jsonArray
-            dataArray?.mapNotNull { item ->
+            val historyList = dataArray?.mapNotNull { item ->
                 val queryItem = item.jsonObject["query"]?.jsonPrimitive?.content
                 queryItem?.let { QuickSearchItem.SearchQueryItem(it, true) }
             } ?: emptyList()
+            queryList.addAll(historyList)
+            val trendingObject = resultObject["TRENDING_QUERIES"]?.jsonObject
+            val dataTrendingArray = trendingObject?.get("data")?.jsonArray
+            val trendingList = dataTrendingArray?.mapNotNull { item ->
+                val queryItem = item.jsonObject["QUERY"]?.jsonPrimitive?.content
+                queryItem?.let { QuickSearchItem.SearchQueryItem(it, false) }
+            } ?: emptyList()
+            queryList.addAll(trendingList)
+            queryList
         } else {
             query?.let {
                 runCatching {
@@ -700,6 +712,32 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         val jsonObject = api.artist(artist)
         val resultsObject = jsonObject["results"]!!.jsonObject["DATA"]!!.jsonObject
         return resultsObject.toArtist()
+    }
+
+    suspend fun isFollowingArtist(id: String): Boolean {
+        val artObject = api.getArtists()
+        val resultObject = artObject["results"]!!.jsonObject
+        val tabObject = resultObject["TAB"]!!.jsonObject
+        val artistsObject = tabObject["artists"]!!.jsonObject
+        val dataArray = artistsObject["data"]!!.jsonArray
+        var isFollowing = false
+        dataArray.map { item ->
+            val artistId = item.jsonObject["ART_ID"]?.jsonPrimitive?.content ?: ""
+            if(artistId.contains(id)) {
+                isFollowing = true
+            }
+        }
+        return isFollowing
+    }
+
+    override suspend fun followArtist(artist: Artist): Boolean {
+        api.followArtist(artist.id)
+        return true
+    }
+
+    override suspend fun unfollowArtist(artist: Artist): Boolean {
+        api.unfollowArtist(artist.id)
+        return true
     }
 
     //<============= Login =============>
