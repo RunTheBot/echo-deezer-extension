@@ -7,6 +7,8 @@ import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -226,8 +228,8 @@ class DeezerApi {
         return userList
     }
 
-    suspend fun getArlByEmail(mail: String, password: String) {
-        //Get SID
+    suspend fun getArlByEmail(mail: String, password: String) = withContext(Dispatchers.IO) {
+        // Get SID
         getSid()
 
         val clientId = "447462"
@@ -241,7 +243,7 @@ class DeezerApi {
             "hash" to md5(clientId + mail + md5Password + clientSecret)
         )
 
-        //Get access token
+        // Get access token
         val responseJson = getToken(params)
         val apiResponse = json.decodeFromString<JsonObject>(responseJson)
         DeezerCredentialsHolder.updateCredentials(token = apiResponse.jsonObject["access_token"]!!.jsonPrimitive.content)
@@ -598,34 +600,38 @@ class DeezerApi {
         return json.decodeFromString<JsonObject>(jsonData)
     }
 
-    suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) {
-        tracks.forEach {
-            callApi(
-                method = "playlist.addSongs",
-                params = buildJsonObject {
-                    put("playlist_id", playlist.id)
-                    put("songs", buildJsonArray {
-                        add(buildJsonArray { add(it.id); add(0) })
-                    })
-                }
-            )
-        }
+    suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) = withContext(Dispatchers.IO) {
+        tracks.map { track ->
+            async {
+                callApi(
+                    method = "playlist.addSongs",
+                    params = buildJsonObject {
+                        put("playlist_id", playlist.id)
+                        put("songs", buildJsonArray {
+                            add(buildJsonArray { add(track.id); add(0) })
+                        })
+                    }
+                )
+            }
+        }.awaitAll()
     }
 
-    suspend fun removeFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) {
+    suspend fun removeFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) = withContext(Dispatchers.IO) {
         val trackIds = tracks.map { it.id }
         val ids = indexes.map { index -> trackIds[index] }
-        ids.forEach {
-            callApi(
-                method = "playlist.deleteSongs",
-                params = buildJsonObject {
-                    put("playlist_id", playlist.id)
-                    put("songs", buildJsonArray {
-                        add(buildJsonArray { add(it); add(0) })
-                    })
-                }
-            )
-        }
+        ids.map { id ->
+            async {
+                callApi(
+                    method = "playlist.deleteSongs",
+                    params = buildJsonObject {
+                        put("playlist_id", playlist.id)
+                        put("songs", buildJsonArray {
+                            add(buildJsonArray { add(id); add(0) })
+                        })
+                    }
+                )
+            }
+        }.awaitAll()
     }
 
     suspend fun createPlaylist(title: String, description: String? = ""): JsonObject {
@@ -728,7 +734,7 @@ class DeezerApi {
         return json.decodeFromString<JsonObject>(pipeResponse.body.string())
     }
 
-    suspend fun log(track: Track) {
+    suspend fun log(track: Track) = withContext(Dispatchers.IO) {
         val id = track.id
         val next = track.extras["NEXT"]
         val ctxtT: String
