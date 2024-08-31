@@ -1,14 +1,18 @@
 import com.android.build.gradle.AppExtension
+import java.io.ByteArrayOutputStream
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
+val gitHash = execute("git", "rev-parse", "HEAD").take(7)
+val gitCount = execute("git", "rev-list", "--count", "HEAD").toInt()
+
 apply<EchoExtensionPlugin>()
 configure<EchoExtension> {
-    versionCode = 1
-    versionName = "1.0.0"
+    versionCode = gitCount
+    versionName = gitHash
     extensionClass = "DeezerExtension"
     id = "deezer"
     name = "Deezer"
@@ -40,6 +44,11 @@ android {
                 "proguard-rules.pro"
             )
         }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 open class EchoExtension {
@@ -74,4 +83,13 @@ abstract class EchoExtensionPlugin : Plugin<Project> {
             }
         }
     }
+}
+
+fun execute(vararg command: String): String {
+    val outputStream = ByteArrayOutputStream()
+    project.exec {
+        commandLine(*command)
+        standardOutput = outputStream
+    }
+    return outputStream.toString().trim()
 }

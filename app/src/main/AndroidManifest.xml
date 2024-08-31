@@ -2,8 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-feature android:name="dev.brahmkshatriya.echo.music" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
+        android:theme="@style/AppTheme"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name">
         <meta-data
@@ -27,5 +29,19 @@
         <meta-data
             android:name="icon_url"
             android:value="@string/icon_url" />
+
+        <activity
+            android:name="dev.brahmkshatriya.echo.link.Opener"
+            android:exported="true">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:host="www.deezer.com" />
+                <data android:host="deezer.page.link" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>
