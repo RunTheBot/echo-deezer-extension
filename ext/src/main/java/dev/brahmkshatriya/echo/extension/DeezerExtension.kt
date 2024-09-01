@@ -31,7 +31,9 @@ import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
 import dev.brahmkshatriya.echo.common.settings.Setting
 import dev.brahmkshatriya.echo.common.settings.SettingCategory
+import dev.brahmkshatriya.echo.common.settings.SettingItem
 import dev.brahmkshatriya.echo.common.settings.SettingList
+import dev.brahmkshatriya.echo.common.settings.SettingSlider
 import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.Settings
 import dev.brahmkshatriya.echo.extension.DeezerCountries.getDefaultCountryIndex
@@ -64,14 +66,6 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     private val api = DeezerApi()
 
     override val settingItems: List<Setting> get() = listOf(
-        SettingList(
-            "Audio Quality",
-            "quality",
-            "Choose your preferred audio quality",
-            mutableListOf("FLAC", "320kbps", "128kbps"),
-            mutableListOf("flac", "320", "128"),
-            1
-        ),
         SettingSwitch(
           "Use Proxy",
             "proxy",
@@ -89,6 +83,28 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             "history",
             "Enables the search history",
             true
+        ),
+        SettingCategory(
+            "Quality",
+            "quality",
+            mutableListOf(
+                SettingList(
+                    "Audio Quality",
+                    "audio_quality",
+                    "Choose your preferred audio quality",
+                    mutableListOf("FLAC", "320kbps", "128kbps"),
+                    mutableListOf("flac", "320", "128"),
+                    1
+                ),
+                SettingSlider(
+                    "Image Quality",
+                    "image_quality",
+                    "Choose your preferred image quality",
+                    120,
+                    1920,
+                    120
+                )
+            )
         ),
         SettingCategory(
             "Language & Country",
@@ -547,11 +563,11 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         if(small.extras["__TYPE__"] == "show") {
             val jsonObject = api.show(small)
             val resultsObject = jsonObject["results"]!!.jsonObject
-            return resultsObject.toShow()
+            return resultsObject.toShow(true)
         } else {
             val jsonObject = api.album(small)
             val resultsObject = jsonObject["results"]!!.jsonObject
-            return resultsObject.toAlbum()
+            return resultsObject.toAlbum(true)
         }
     }
 
@@ -604,7 +620,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     override suspend fun loadPlaylist(playlist: Playlist): Playlist {
         val jsonObject = api.playlist(playlist)
         val resultsObject = jsonObject["results"]!!.jsonObject
-        return resultsObject.toPlaylist()
+        return resultsObject.toPlaylist(true)
     }
 
     override fun loadTracks(playlist: Playlist): PagedData<Track> = PagedData.Single {
@@ -682,7 +698,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     override suspend fun loadArtist(small: Artist): Artist {
         val jsonObject = api.artist(small)
         val resultsObject = jsonObject["results"]!!.jsonObject["DATA"]!!.jsonObject
-        return resultsObject.toArtist(isFollowingArtist(small.id))
+        return resultsObject.toArtist(isFollowingArtist(small.id), true)
     }
 
     private suspend fun isFollowingArtist(id: String): Boolean {
@@ -804,7 +820,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     private val arlExpired: Boolean get() = utils.arlExpired
     private val credentials: DeezerCredentials get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException(LOGIN_REQUIRED_MESSAGE)
     private val utils: DeezerUtils get() = DeezerUtils
-    private val quality: String get() = settings?.getString("quality") ?: DEFAULT_QUALITY
+    private val quality: String get() = settings?.getString("audio_quality") ?: DEFAULT_QUALITY
     private val log: Boolean get() = settings?.getBoolean("log") ?: false
     private val history: Boolean get() = settings?.getBoolean("history") ?: true
 

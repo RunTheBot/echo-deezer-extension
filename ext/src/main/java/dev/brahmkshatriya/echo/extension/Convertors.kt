@@ -41,7 +41,6 @@ fun JsonArray.toMediaItemsContainer(name: String = "Unknown"): MediaItemsContain
     )
 }
 
-
 fun JsonObject.toEchoMediaItem(): EchoMediaItem? {
     val data = this["data"]?.jsonObject ?: this
     val type = data["__TYPE__"]?.jsonPrimitive?.content ?: return null
@@ -56,13 +55,13 @@ fun JsonObject.toEchoMediaItem(): EchoMediaItem? {
     }
 }
 
-fun JsonObject.toShow(): Album {
+fun JsonObject.toShow(loaded: Boolean = false): Album {
     val data = this["data"]?.jsonObject ?: this["DATA"]?.jsonObject ?: this
     val md5 = data["SHOW_ART_MD5"]?.jsonPrimitive?.content.orEmpty()
     return Album(
         id = data["SHOW_ID"]?.jsonPrimitive?.content.orEmpty(),
         title = data["SHOW_NAME"]?.jsonPrimitive?.content.orEmpty(),
-        cover = getCover(md5, "talk"),
+        cover = getCover(md5, "talk", loaded),
         tracks = this["EPISODES"]?.jsonObject?.get("total")?.jsonPrimitive?.int,
         artists = listOf(Artist(id = "", name = "")),
         description = data["SHOW_DESCRIPTION"]?.jsonPrimitive?.content.orEmpty(),
@@ -77,7 +76,7 @@ fun JsonObject.toEpisode(): Track {
     return Track(
         id = data["EPISODE_ID"]?.jsonPrimitive?.content.orEmpty(),
         title = title,
-        cover = getCover(md5, "talk"),
+        cover = getCover(md5, "talk", false),
         duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
         streamables = listOf(
             Streamable.audio(
@@ -94,8 +93,7 @@ fun JsonObject.toEpisode(): Track {
     )
 }
 
-
-fun JsonObject.toAlbum(): Album {
+fun JsonObject.toAlbum(loaded: Boolean = false): Album {
     val data = this["data"]?.jsonObject ?: this["DATA"]?.jsonObject ?: this
     val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content.orEmpty()
     val artistObject = data["ARTISTS"]?.jsonArray?.firstOrNull()?.jsonObject
@@ -103,7 +101,7 @@ fun JsonObject.toAlbum(): Album {
     return Album(
         id = data["ALB_ID"]?.jsonPrimitive?.content.orEmpty(),
         title = data["ALB_TITLE"]?.jsonPrimitive?.content.orEmpty(),
-        cover = getCover(md5, "cover"),
+        cover = getCover(md5, "cover", loaded),
         tracks = this["SONGS"]?.jsonObject?.get("total")?.jsonPrimitive?.int,
         artists = listOfNotNull(
             artistObject?.let {
@@ -119,13 +117,13 @@ fun JsonObject.toAlbum(): Album {
     )
 }
 
-fun JsonObject.toArtist(isFollowing: Boolean = false): Artist {
+fun JsonObject.toArtist(isFollowing: Boolean = false, loaded: Boolean = false): Artist {
     val data = this["data"]?.jsonObject ?: this
     val md5 = data["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty()
     return Artist(
         id = data["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
         name = data["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
-        cover = getCover(md5, "artist"),
+        cover = getCover(md5, "artist", loaded),
         description = this["description"]?.jsonPrimitive?.content.orEmpty(),
         subtitle = this["subtitle"]?.jsonPrimitive?.content.orEmpty(),
         isFollowing = isFollowing
@@ -141,7 +139,7 @@ fun JsonObject.toTrack(): Track {
     return Track(
         id = data["SNG_ID"]?.jsonPrimitive?.content.orEmpty(),
         title = data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty(),
-        cover = getCover(md5, "cover"),
+        cover = getCover(md5, "cover", false),
         duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
         releaseDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toLongOrNull()?.let {
             Date.from(Instant.ofEpochSecond(it)).toString()
@@ -162,14 +160,14 @@ fun JsonObject.toTrack(): Track {
     )
 }
 
-fun JsonObject.toPlaylist(): Playlist {
+fun JsonObject.toPlaylist(loaded: Boolean = false): Playlist {
     val data = this["data"]?.jsonObject ?: this["DATA"]?.jsonObject ?: this
     val type = data["PICTURE_TYPE"]?.jsonPrimitive?.content.orEmpty()
     val md5 = data["PLAYLIST_PICTURE"]?.jsonPrimitive?.content.orEmpty()
     return Playlist(
         id = data["PLAYLIST_ID"]?.jsonPrimitive?.content.orEmpty(),
         title = data["TITLE"]?.jsonPrimitive?.content.orEmpty(),
-        cover = getCover(md5, type),
+        cover = getCover(md5, type, loaded),
         description = data["DESCRIPTION"]?.jsonPrimitive?.content.orEmpty(),
         subtitle = this["subtitle"]?.jsonPrimitive?.content.orEmpty(),
         isEditable = data["PARENT_USER_ID"]?.jsonPrimitive?.content == DeezerCredentialsHolder.credentials?.userId,
@@ -177,7 +175,14 @@ fun JsonObject.toPlaylist(): Playlist {
     )
 }
 
-fun getCover(md5: String, type: String): ImageHolder {
-    val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/1200x1200-000000-80-0-0.jpg"
-    return url.toImageHolder()
+private val quality: Int get() = DeezerUtils.settings?.getInt("image_quality") ?: 0
+
+fun getCover(md5: String, type: String, loaded: Boolean = false): ImageHolder {
+    if(loaded) {
+        val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/${quality}x$quality-000000-80-0-0.jpg"
+        return url.toImageHolder()
+    } else {
+        val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/264x264-000000-80-0-0.jpg"
+        return url.toImageHolder()
+    }
 }
