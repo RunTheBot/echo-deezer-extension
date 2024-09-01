@@ -24,7 +24,8 @@ import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.QuickSearchItem
 import dev.brahmkshatriya.echo.common.models.Request.Companion.toRequest
 import dev.brahmkshatriya.echo.common.models.Streamable
-import dev.brahmkshatriya.echo.common.models.StreamableAudio
+import dev.brahmkshatriya.echo.common.models.Streamable.Audio.Companion.toAudio
+import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toMedia
 import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
@@ -424,16 +425,14 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
 
     //<============= Play =============>
 
-    override suspend fun getStreamableAudio(streamable: Streamable): StreamableAudio {
+    override suspend fun getStreamableMedia(streamable: Streamable): Streamable.Media {
         return if (streamable.quality == 1) {
-            StreamableAudio.StreamableRequest(streamable.id.toRequest())
+           streamable.id.toAudio().toMedia()
         } else {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
             getByteStreamAudio(scope, streamable, client)
         }
     }
-
-    override suspend fun getStreamableVideo(streamable: Streamable) = throw Exception("not Used")
 
     override suspend fun loadTrack(track: Track) = coroutineScope {
         if (track.extras["__TYPE__"] == "show") {
@@ -503,10 +502,11 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
             title = track.title,
             cover = track.cover,
             artists = track.artists,
-            audioStreamables = listOf(
-                Streamable(
+            streamables = listOf(
+                Streamable.audio(
                     id = url,
                     quality = 0,
+                    title = track.title,
                     extra = mapOf("key" to key)
                 )
             )

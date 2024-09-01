@@ -1,6 +1,9 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
     id("java-library")
     id("org.jetbrains.kotlin.jvm")
+    id("com.gradleup.shadow") version "8.3.0"
 }
 
 java {
@@ -17,3 +20,11 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }
+
+
+tasks {
+    val shadowJar by getting(ShadowJar::class) {
+        archiveBaseName.set("deezer")
+    }
+}
+

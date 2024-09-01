@@ -73,14 +73,16 @@ fun JsonObject.toShow(): Album {
 fun JsonObject.toEpisode(): Track {
     val data = this["data"]?.jsonObject ?: this["DATA"]?.jsonObject ?: this
     val md5 = data["SHOW_ART_MD5"]?.jsonPrimitive?.content.orEmpty()
+    val title = data["EPISODE_TITLE"]?.jsonPrimitive?.content.orEmpty()
     return Track(
         id = data["EPISODE_ID"]?.jsonPrimitive?.content.orEmpty(),
-        title = data["EPISODE_TITLE"]?.jsonPrimitive?.content.orEmpty(),
+        title = title,
         cover = getCover(md5, "talk"),
         duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
-        audioStreamables = listOf(
-            Streamable(
+        streamables = listOf(
+            Streamable.audio(
                 id = data["EPISODE_DIRECT_STREAM_URL"]?.jsonPrimitive?.content.orEmpty(),
+                title = title,
                 quality = 1
             )
         ),

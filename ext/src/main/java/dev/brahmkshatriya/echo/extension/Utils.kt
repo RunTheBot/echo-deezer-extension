@@ -1,7 +1,7 @@
 package dev.brahmkshatriya.echo.extension
 
 import dev.brahmkshatriya.echo.common.models.Streamable
-import dev.brahmkshatriya.echo.common.models.StreamableAudio
+import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toMedia
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -82,7 +82,7 @@ fun getByteStreamAudio(
     scope: CoroutineScope,
     streamable: Streamable,
     client: OkHttpClient
-): StreamableAudio {
+): Streamable.Media {
     val url = streamable.id
     val contentLength = Utils.getContentLength(url, client)
     val key = streamable.extra["key"]!!
@@ -158,10 +158,10 @@ fun getByteStreamAudio(
         }
     }
 
-    return StreamableAudio.ByteStreamAudio(
+    return Streamable.Audio.ByteStream(
         stream = pipedInputStream,
         totalBytes = contentLength
-    )
+    ).toMedia()
 }
 
 suspend fun retry(times: Int, delayMillis: Long = 1000, block: suspend () -> Unit) {
@@ -175,7 +175,6 @@ suspend fun retry(times: Int, delayMillis: Long = 1000, block: suspend () -> Uni
         }
     }
 }
-
 
 @Suppress("NewApi", "GetInstance")
 fun generateTrackUrl(trackId: String, md5Origin: String, mediaVersion: String, quality: Int): String {
