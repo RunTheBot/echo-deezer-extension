@@ -172,7 +172,8 @@ fun Track.toNewTrack(): Track {
         duration = this.duration,
         releaseDate = this.releaseDate,
         artists = this.artists,
-        extras = this.extras
+        extras = this.extras,
+        streamables = this.streamables
     )
 }
 
