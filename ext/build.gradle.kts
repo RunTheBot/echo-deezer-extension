@@ -1,5 +1,5 @@
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import java.io.ByteArrayOutputStream
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
     id("java-library")
@@ -12,6 +12,10 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
+kotlin {
+    jvmToolchain(17)
+}
+
 dependencies {
     val libVersion: String by project
     compileOnly("com.github.brahmkshatriya:echo:$libVersion")
@@ -21,6 +25,8 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }
+
+// Extension properties goto `gradle.properties` to set values
 
 val extType: String by project
 val extId: String by project
@@ -40,7 +46,6 @@ val gitHash = execute("git", "rev-parse", "HEAD").take(7)
 val gitCount = execute("git", "rev-list", "--count", "HEAD").toInt()
 val verCode = gitCount
 val verName = gitHash
-
 
 tasks {
     val shadowJar by getting(ShadowJar::class) {
@@ -79,4 +84,3 @@ fun execute(vararg command: String): String {
     }
     return outputStream.toString().trim()
 }
-
