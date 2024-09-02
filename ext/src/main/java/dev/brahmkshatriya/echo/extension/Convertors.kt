@@ -88,6 +88,8 @@ fun JsonObject.toEpisode(): Track {
         extras = mapOf(
             "TRACK_TOKEN" to data["TRACK_TOKEN"]?.jsonPrimitive?.content.orEmpty(),
             "FILESIZE_MP3_MISC" to (data["FILESIZE_MP3_MISC"]?.jsonPrimitive?.content ?: "0"),
+            "MD5" to md5,
+            "TYPE" to "talk",
             "__TYPE__" to "show"
         )
     )
@@ -155,8 +157,22 @@ fun JsonObject.toTrack(): Track {
         ),
         extras = mapOf(
             "TRACK_TOKEN" to data["TRACK_TOKEN"]?.jsonPrimitive?.content.orEmpty(),
-            "FILESIZE_MP3_MISC" to (data["FILESIZE_MP3_MISC"]?.jsonPrimitive?.content ?: "0")
+            "FILESIZE_MP3_MISC" to (data["FILESIZE_MP3_MISC"]?.jsonPrimitive?.content ?: "0"),
+            "MD5" to md5,
+            "TYPE" to "cover"
         )
+    )
+}
+
+fun Track.toNewTrack(): Track {
+    return Track(
+        id = this.id,
+        title = this.title,
+        cover = getCover(this.extras["MD5"], this.extras["TYPE"], true),
+        duration = this.duration,
+        releaseDate = this.releaseDate,
+        artists = this.artists,
+        extras = this.extras
     )
 }
 
@@ -177,7 +193,7 @@ fun JsonObject.toPlaylist(loaded: Boolean = false): Playlist {
 
 private val quality: Int get() = DeezerUtils.settings?.getInt("image_quality") ?: 0
 
-fun getCover(md5: String, type: String, loaded: Boolean = false): ImageHolder {
+fun getCover(md5: String?, type: String?, loaded: Boolean = false): ImageHolder {
     if(loaded) {
         val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/${quality}x$quality-000000-80-0-0.jpg"
         return url.toImageHolder()

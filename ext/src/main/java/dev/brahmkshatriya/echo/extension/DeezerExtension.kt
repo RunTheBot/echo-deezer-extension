@@ -17,6 +17,7 @@ import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.ClientException
+import dev.brahmkshatriya.echo.common.models.ImageHolder
 import dev.brahmkshatriya.echo.common.models.Lyric
 import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.common.models.MediaItemsContainer
@@ -451,8 +452,10 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override suspend fun loadTrack(track: Track) = coroutineScope {
+        val newTrack = track.toNewTrack()
+
         if (track.extras["__TYPE__"] == "show") {
-            return@coroutineScope track
+            return@coroutineScope newTrack
         }
 
         val jsonObjectDeferred = async {
@@ -516,7 +519,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
         Track(
             id = track.id,
             title = track.title,
-            cover = track.cover,
+            cover = newTrack.cover,
             artists = track.artists,
             streamables = listOf(
                 Streamable.audio(
