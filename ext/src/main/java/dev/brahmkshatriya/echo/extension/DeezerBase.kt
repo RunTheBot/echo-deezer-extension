@@ -24,8 +24,6 @@ object DeezerCountries {
             settings?.putString("countryCode", defaultCountryCode)
             countryEntryValues.indexOf(defaultCountryCode).takeIf { it >= 0 } ?: 0
         }
-
-
     }
 
     val countryEntryTitles = mutableListOf(
@@ -77,8 +75,6 @@ object DeezerCountries {
             settings?.putString("languageCode", defaultLanguageCode)
             languageEntryValues.indexOf(defaultLanguageCode).takeIf { it >= 0 } ?: 0
         }
-
-
     }
 
     val languageEntryTitles = mutableListOf(

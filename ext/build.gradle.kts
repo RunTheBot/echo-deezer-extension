@@ -26,8 +26,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }
 
-// Extension properties goto `gradle.properties` to set values
-
 val extType: String by project
 val extId: String by project
 val extClass: String by project
