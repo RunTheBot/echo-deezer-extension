@@ -561,7 +561,6 @@ class DeezerApi {
         return json.decodeFromString<JsonObject>(jsonData)
     }
 
-    //Get favorite shows
     suspend fun getShows(): JsonObject {
         val jsonData = callApi(
             method = "deezer.pageProfile",
@@ -747,6 +746,10 @@ class DeezerApi {
                 ctxtT = "playlist_page"
                 track.extras["playlist_id"]
             }
+            !track.extras["artist_id"].isNullOrEmpty() -> {
+                ctxtT = "up_next_artist"
+                track.extras["artist_id"]
+            }
             else -> {
                 ctxtT = ""
                 ""
@@ -791,5 +794,28 @@ class DeezerApi {
                 }
             }
         )
+    }
+
+    suspend fun mix(id: String): JsonObject {
+        val jsonData = callApi(
+            method = "song.getSearchTrackMix",
+            params = buildJsonObject {
+                put("sng_id", id)
+                put("start_with_input_track", false)
+            }
+        )
+        return json.decodeFromString<JsonObject>(jsonData)
+    }
+
+    suspend fun radio(trackId: String, artistId: String): JsonObject {
+        val jsonData = callApi(
+            method = "radio.getUpNext",
+            params = buildJsonObject {
+                put("art_id", artistId)
+                put("limit", 10)
+                put("sng_id", trackId)
+            }
+        )
+        return json.decodeFromString<JsonObject>(jsonData)
     }
 }

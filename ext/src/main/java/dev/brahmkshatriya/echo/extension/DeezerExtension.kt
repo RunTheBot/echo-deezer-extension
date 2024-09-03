@@ -9,6 +9,7 @@ import dev.brahmkshatriya.echo.common.clients.LibraryClient
 import dev.brahmkshatriya.echo.common.clients.LoginClient
 import dev.brahmkshatriya.echo.common.clients.LyricsClient
 import dev.brahmkshatriya.echo.common.clients.PlaylistClient
+import dev.brahmkshatriya.echo.common.clients.RadioClient
 import dev.brahmkshatriya.echo.common.clients.SearchClient
 import dev.brahmkshatriya.echo.common.clients.ShareClient
 import dev.brahmkshatriya.echo.common.clients.TrackClient
@@ -56,7 +57,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.Locale
 
-class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClient, AlbumClient, ArtistClient,
+class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClient, SearchClient, AlbumClient, ArtistClient,
     ArtistFollowClient, PlaylistClient, LyricsClient, ShareClient, LoginClient.WebView.Cookie,
     LoginClient.UsernamePassword, LoginClient.CustomTextInput, LibraryClient {
 
@@ -496,8 +497,8 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
                 val dataObject = fetchTrackData(track)
                 val fallbackObject = dataObject["FALLBACK"]!!.jsonObject
                 val backId = fallbackObject["SNG_ID"]?.jsonPrimitive?.content ?: ""
-                val newTrack = track.copy(id = backId)
-                val newDataObject = fetchTrackData(newTrack)
+                val fallbackTrack = track.copy(id = backId)
+                val newDataObject = fetchTrackData(fallbackTrack)
                 val md5Origin = newDataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
                 val mediaVersion = newDataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
                 generateUrl(track.id, md5Origin, mediaVersion)
@@ -531,6 +532,49 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override fun getMediaItems(track: Track): PagedData<MediaItemsContainer> = getMediaItems(track.artists.first())
+
+    //<============= Radio =============>
+
+    override suspend fun radio(track: Track): Playlist {
+        return Playlist(
+            id = track.id,
+            title = track.title,
+            cover = track.cover,
+            isEditable = false,
+            extras = mapOf(
+                "mix" to "0"
+            )
+        )
+    }
+
+    override suspend fun radio(album: Album): Playlist {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun radio(artist: Artist): Playlist {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun radio(user: User): Playlist {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun radio(playlist: Playlist): Playlist {
+        val jsonObject = api.playlist(playlist)
+        val resultsObject = jsonObject["results"]!!.jsonObject
+        val songsObject = resultsObject["SONGS"]!!.jsonObject
+        val lastTrack = songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack()
+        return Playlist(
+            id = lastTrack.id,
+            title = lastTrack.title,
+            cover = lastTrack.cover,
+            isEditable = false,
+            extras = mapOf(
+                "mix" to "1",
+                "artist" to lastTrack.artists[0].id
+            )
+        )
+    }
 
     //<============= Lyrics =============>
 
@@ -625,14 +669,26 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
     }
 
     override fun loadTracks(playlist: Playlist): PagedData<Track> = PagedData.Single {
-        val jsonObject = api.playlist(playlist)
-        val resultsObject = jsonObject["results"]!!.jsonObject
-        val songsObject = resultsObject["SONGS"]!!.jsonObject
-        val dataArray = songsObject["data"]!!.jsonArray
-        val data = dataArray.mapIndexed { index, song ->
+        val dataArray = when (playlist.extras["mix"]) {
+            "0" -> {
+                val jsonObject = api.mix(playlist.id)
+                jsonObject["results"]!!.jsonObject["data"]!!.jsonArray
+            }
+            "1" -> {
+                val jsonObject = api.radio(playlist.id, playlist.extras["artist"] ?: "")
+                jsonObject["results"]!!.jsonObject["data"]!!.jsonArray
+            }
+            else -> {
+                val jsonObject = api.playlist(playlist)
+                jsonObject["results"]!!.jsonObject["SONGS"]!!.jsonObject["data"]!!.jsonArray
+            }
+        }
+
+        dataArray.mapIndexed { index, song ->
             val currentTrack = song.jsonObject.toTrack()
             val nextTrack = dataArray.getOrNull(index + 1)?.jsonObject?.toTrack()
             val nextTrackId = nextTrack?.id
+
             Track(
                 id = currentTrack.id,
                 title = currentTrack.title,
@@ -640,10 +696,18 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, SearchClie
                 duration = currentTrack.duration,
                 releaseDate = currentTrack.releaseDate,
                 artists = currentTrack.artists,
-                extras = currentTrack.extras.plus(mapOf(Pair("NEXT", nextTrackId ?: ""), Pair("playlist_id", playlist.id)))
+                extras = currentTrack.extras.plus(
+                    mapOf(
+                        "NEXT" to (nextTrackId ?: ""),
+                        when (playlist.extras["mix"]) {
+                            "0" -> "artist_id" to currentTrack.artists[0].id
+                            "1" -> "artist_id" to currentTrack.artists[0].id
+                            else -> "playlist_id" to playlist.id
+                        }
+                    )
+                )
             )
         }
-        data
     }
 
     //<============= Artist =============>
