@@ -192,7 +192,7 @@ fun JsonObject.toPlaylist(loaded: Boolean = false): Playlist {
     )
 }
 
-private val quality: Int get() = DeezerUtils.settings?.getInt("image_quality") ?: 0
+private val quality: Int get() = DeezerUtils.settings?.getInt("image_quality") ?: 240
 
 fun getCover(md5: String?, type: String?, loaded: Boolean = false): ImageHolder {
     if(loaded) {
