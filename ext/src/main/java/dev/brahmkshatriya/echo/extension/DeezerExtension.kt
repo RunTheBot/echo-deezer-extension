@@ -542,13 +542,26 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
             cover = track.cover,
             isEditable = false,
             extras = mapOf(
-                "mix" to "0"
+                "radio" to "track"
             )
         )
     }
 
     override suspend fun radio(album: Album): Playlist {
-        TODO("Not yet implemented")
+        val jsonObject = api.album(album)
+        val resultsObject = jsonObject["results"]!!.jsonObject
+        val songsObject = resultsObject["SONGS"]!!.jsonObject
+        val lastTrack = songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack()
+        return Playlist(
+            id = lastTrack.id,
+            title = lastTrack.title,
+            cover = lastTrack.cover,
+            isEditable = false,
+            extras = mapOf(
+                "radio" to "album",
+                "artist" to lastTrack.artists[0].id
+            )
+        )
     }
 
     override suspend fun radio(artist: Artist): Playlist {
@@ -570,7 +583,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
             cover = lastTrack.cover,
             isEditable = false,
             extras = mapOf(
-                "mix" to "1",
+                "radio" to "playlist",
                 "artist" to lastTrack.artists[0].id
             )
         )
@@ -669,12 +682,12 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
     }
 
     override fun loadTracks(playlist: Playlist): PagedData<Track> = PagedData.Single {
-        val dataArray = when (playlist.extras["mix"]) {
-            "0" -> {
+        val dataArray = when (playlist.extras["radio"]) {
+            "track" -> {
                 val jsonObject = api.mix(playlist.id)
                 jsonObject["results"]!!.jsonObject["data"]!!.jsonArray
             }
-            "1" -> {
+            "playlist", "album" -> {
                 val jsonObject = api.radio(playlist.id, playlist.extras["artist"] ?: "")
                 jsonObject["results"]!!.jsonObject["data"]!!.jsonArray
             }
@@ -699,9 +712,9 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
                 extras = currentTrack.extras.plus(
                     mapOf(
                         "NEXT" to (nextTrackId ?: ""),
-                        when (playlist.extras["mix"]) {
-                            "0" -> "artist_id" to currentTrack.artists[0].id
-                            "1" -> "artist_id" to currentTrack.artists[0].id
+                        when (playlist.extras["radio"]) {
+                            "track" -> "artist_id" to currentTrack.artists[0].id
+                            "playlist", "album" -> "artist_id" to (playlist.extras["artist"] ?: "")
                             else -> "playlist_id" to playlist.id
                         }
                     )
