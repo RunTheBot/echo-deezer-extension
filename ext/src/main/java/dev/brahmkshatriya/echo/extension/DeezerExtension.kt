@@ -617,13 +617,13 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
 
     override fun getMediaItems(album: Album) = getMediaItems(album.artists.first())
 
-    override suspend fun loadAlbum(small: Album): Album {
-        if(small.extras["__TYPE__"] == "show") {
-            val jsonObject = api.show(small)
+    override suspend fun loadAlbum(album: Album): Album {
+        if(album.extras["__TYPE__"] == "show") {
+            val jsonObject = api.show(album)
             val resultsObject = jsonObject["results"]!!.jsonObject
             return resultsObject.toShow(true)
         } else {
-            val jsonObject = api.album(small)
+            val jsonObject = api.album(album)
             val resultsObject = jsonObject["results"]!!.jsonObject
             return resultsObject.toAlbum(true)
         }
