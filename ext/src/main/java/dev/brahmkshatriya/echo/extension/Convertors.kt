@@ -136,8 +136,8 @@ fun JsonObject.toArtist(isFollowing: Boolean = false, loaded: Boolean = false): 
 fun JsonObject.toTrack(): Track {
     val data = this["data"]?.jsonObject ?: this
     val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content.orEmpty()
-    val artistObject = data["ARTISTS"]?.jsonArray?.firstOrNull()?.jsonObject
-    val artistMd5 = artistObject?.get("ART_PICTURE")?.jsonPrimitive?.content.orEmpty()
+    val artistObject = data["ARTISTS"]?.jsonArray?.firstOrNull()?.jsonObject ?: this
+    val artistMd5 = artistObject["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty()
     return Track(
         id = data["SNG_ID"]?.jsonPrimitive?.content.orEmpty(),
         title = data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty(),
@@ -147,13 +147,11 @@ fun JsonObject.toTrack(): Track {
             Date.from(Instant.ofEpochSecond(it)).toString()
         },
         artists = listOfNotNull(
-            artistObject?.let {
-                Artist(
-                    id = it["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
-                    name = it["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
-                    cover = getCover(artistMd5, "artist")
-                )
-            }
+            Artist(
+                id = artistObject["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
+                name = artistObject["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
+                cover = getCover(artistMd5, "artist")
+            )
         ),
         extras = mapOf(
             "TRACK_TOKEN" to data["TRACK_TOKEN"]?.jsonPrimitive?.content.orEmpty(),

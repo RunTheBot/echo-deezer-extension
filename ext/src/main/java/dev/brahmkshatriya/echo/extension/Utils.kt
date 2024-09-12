@@ -85,7 +85,7 @@ fun getByteStreamAudio(
 ): Streamable.Media {
     val url = streamable.id
     val contentLength = Utils.getContentLength(url, client)
-    val key = streamable.extra["key"]!!
+    val key = streamable.extra["key"] ?: ""
 
     val request = Request.Builder().url(url).build()
     val pipedInputStream = PipedInputStream()
@@ -105,37 +105,24 @@ fun getByteStreamAudio(
                     response.body.byteStream().buffered().use { byteStream ->
                         try {
                             val buffer = ByteArray(2048)
-                            var totalRead: Int
+                            var totalBytesRead = 0L
                             var counter = 0
 
-                            while (true) {
-                                totalRead = 0
-                                while (totalRead < 2048) {
-                                    val bytesRead =
-                                        byteStream.read(buffer, totalRead, 2048 - totalRead)
-                                    if (bytesRead == -1) break
+                            while (totalBytesRead < contentLength) {
+                                val bytesRead = byteStream.read(buffer)
 
-                                    totalRead += bytesRead
-                                }
+                                if (bytesRead == -1) break
 
-                                if (totalRead == 0) break
+                                totalBytesRead += bytesRead
 
-                                if (totalRead == 2048) {
-                                    if (counter % 3 == 0) {
-                                        val decryptedChunk = Utils.decryptBlowfish(buffer, key)
-                                        pipedOutputStream.write(decryptedChunk)
-                                    } else {
-                                        pipedOutputStream.write(buffer, 0, 2048)
-                                    }
+                                if(bytesRead < 2048) {
+                                    val partialBuffer = buffer.copyOf(bytesRead)
+                                    pipedOutputStream.write(partialBuffer, 0, bytesRead)
+                                } else if ((counter % 3) == 0) {
+                                    val decryptedChunk = Utils.decryptBlowfish(buffer, key)
+                                    pipedOutputStream.write(decryptedChunk, 0, decryptedChunk.size)
                                 } else {
-                                    if (counter % 3 == 0) {
-                                        val partialBuffer = buffer.copyOf(totalRead)
-                                        val decryptedChunk =
-                                            Utils.decryptBlowfish(partialBuffer, key)
-                                        pipedOutputStream.write(decryptedChunk, 0, totalRead)
-                                    } else {
-                                        pipedOutputStream.write(buffer, 0, totalRead)
-                                    }
+                                    pipedOutputStream.write(buffer, 0, bytesRead)
                                 }
 
                                 counter++

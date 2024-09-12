@@ -485,29 +485,41 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
             url
         }
 
-        val jsonObject = jsonObjectDeferred.await()
-        val url = when {
-            jsonObject.toString().contains("Track token has no sufficient rights on requested media") -> {
-                val dataObject = fetchTrackData(track)
-                val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
-                val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-                generateUrl(track.id, md5Origin, mediaVersion)
-            }
-            jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
-                val dataObject = fetchTrackData(track)
-                val fallbackObject = dataObject["FALLBACK"]!!.jsonObject
-                val backId = fallbackObject["SNG_ID"]?.jsonPrimitive?.content ?: ""
-                val fallbackTrack = track.copy(id = backId)
-                val newDataObject = fetchTrackData(fallbackTrack)
-                val md5Origin = newDataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
-                val mediaVersion = newDataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-                generateUrl(track.id, md5Origin, mediaVersion)
-            }
-            else -> {
-                val dataObject = jsonObject["data"]!!.jsonArray.first().jsonObject
-                val mediaObject = dataObject["media"]!!.jsonArray.first().jsonObject
-                val sourcesObject = mediaObject["sources"]!!.jsonArray[0]
-                sourcesObject.jsonObject["url"]!!.jsonPrimitive.content
+        val jsonObjects = jsonObjectDeferred.await()
+        val urls = jsonObjects.map { jsonObject ->
+            when {
+                jsonObject.toString()
+                    .contains("Track token has no sufficient rights on requested media") -> {
+                    val dataObject = fetchTrackData(track)
+                    val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
+                    val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
+                    generateUrl(track.id, md5Origin, mediaVersion)
+                }
+
+                track.extras["FILESIZE_MP3_MISC"] != "0" && track.extras["FILESIZE_MP3_MISC"] != null && jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
+                    val dataObject = fetchTrackData(track)
+                    val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
+                    val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
+                    generateUrl(track.id, md5Origin, mediaVersion)
+                }
+
+                jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
+                    val dataObject = fetchTrackData(track)
+                    val fallbackObject = dataObject["FALLBACK"]!!.jsonObject
+                    val backId = fallbackObject["SNG_ID"]?.jsonPrimitive?.content ?: ""
+                    val fallbackTrack = track.copy(id = backId)
+                    val newDataObject = fetchTrackData(fallbackTrack)
+                    val md5Origin = newDataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
+                    val mediaVersion = newDataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
+                    generateUrl(track.id, md5Origin, mediaVersion)
+                }
+
+                else -> {
+                    val dataObject = jsonObject["data"]!!.jsonArray.first().jsonObject
+                    val mediaObject = dataObject["media"]!!.jsonArray.first().jsonObject
+                    val sourcesObject = mediaObject["sources"]!!.jsonArray[0]
+                    sourcesObject.jsonObject["url"]!!.jsonPrimitive.content
+                }
             }
         }
 
@@ -515,19 +527,27 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
             api.log(track)
         }
 
+        val streamables = urls.mapIndexed { index, url ->
+            Streamable.audio(
+                id = url,
+                quality = 0,
+                title =
+                    when(index) {
+                        0 -> "FLAC"
+                        1 -> "320kbps"
+                        2 -> "128kbps"
+                        else -> ""
+                    } ,
+                extra = mapOf("key" to key)
+            )
+        }
+
         Track(
             id = track.id,
             title = track.title,
             cover = newTrack.cover,
             artists = track.artists,
-            streamables = listOf(
-                Streamable.audio(
-                    id = url,
-                    quality = 0,
-                    title = track.title,
-                    extra = mapOf("key" to key)
-                )
-            )
+            streamables = streamables
         )
     }
 
@@ -726,55 +746,64 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
     //<============= Artist =============>
 
     override fun getMediaItems(artist: Artist) = PagedData.Single {
-        val dataList = mutableListOf<MediaItemsContainer>()
-        val jsonObject = api.artist(artist)
+        try {
+            val dataList = mutableListOf<MediaItemsContainer>()
+            val jsonObject = api.artist(artist.id)
 
-        val resultsObject = jsonObject["results"]!!.jsonObject
-        for (result in resultsObject) {
-            when (result.key) {
-                "TOP" -> {
-                    val jObject = resultsObject["TOP"]!!.jsonObject
-                    val jArray = jObject["data"]!!.jsonArray
-                    val data = jArray.toMediaItemsContainer(name = "Top")
-                    dataList.add(data)
-                }
-                "HIGHLIGHT" -> {
-                    val jObject = resultsObject["HIGHLIGHT"]!!.jsonObject
-                    val itemObject = jObject["ITEM"]!!.jsonObject
-                    val data = itemObject.toMediaItemsContainer(name = "Highlight")
-                    dataList.add(data)
-                }
-                "SELECTED_PLAYLIST" -> {
-                    val jObject = resultsObject["SELECTED_PLAYLIST"]!!.jsonObject
-                    val jArray = jObject["data"]!!.jsonArray
-                    val data = jArray.toMediaItemsContainer(name = "Selected Playlists")
-                    dataList.add(data)
-                }
-                "RELATED_PLAYLIST" -> {
-                    val jObject = resultsObject["RELATED_PLAYLIST"]!!.jsonObject
-                    val jArray = jObject["data"]!!.jsonArray
-                    val data = jArray.toMediaItemsContainer(name = "Related Playlists")
-                    dataList.add(data)
-                }
-                "RELATED_ARTISTS" -> {
-                    val jObject = resultsObject["RELATED_ARTISTS"]!!.jsonObject
-                    val jArray = jObject["data"]!!.jsonArray
-                    val data = jArray.toMediaItemsContainer(name = "Related Artists")
-                    dataList.add(data)
-                }
-                "ALBUMS" -> {
-                    val jObject = resultsObject["ALBUMS"]!!.jsonObject
-                    val jArray = jObject["data"]!!.jsonArray
-                    val data = jArray.toMediaItemsContainer(name = "Albums")
-                    dataList.add(data)
+            val resultsObject = jsonObject["results"]!!.jsonObject
+            for (result in resultsObject) {
+                when (result.key) {
+                    "TOP" -> {
+                        val jObject = resultsObject["TOP"]!!.jsonObject
+                        val jArray = jObject["data"]!!.jsonArray
+                        val data = jArray.toMediaItemsContainer(name = "Top")
+                        dataList.add(data)
+                    }
+
+                    "HIGHLIGHT" -> {
+                        val jObject = resultsObject["HIGHLIGHT"]!!.jsonObject
+                        val itemObject = jObject["ITEM"]!!.jsonObject
+                        val data = itemObject.toMediaItemsContainer(name = "Highlight")
+                        dataList.add(data)
+                    }
+
+                    "SELECTED_PLAYLIST" -> {
+                        val jObject = resultsObject["SELECTED_PLAYLIST"]!!.jsonObject
+                        val jArray = jObject["data"]!!.jsonArray
+                        val data = jArray.toMediaItemsContainer(name = "Selected Playlists")
+                        dataList.add(data)
+                    }
+
+                    "RELATED_PLAYLIST" -> {
+                        val jObject = resultsObject["RELATED_PLAYLIST"]!!.jsonObject
+                        val jArray = jObject["data"]!!.jsonArray
+                        val data = jArray.toMediaItemsContainer(name = "Related Playlists")
+                        dataList.add(data)
+                    }
+
+                    "RELATED_ARTISTS" -> {
+                        val jObject = resultsObject["RELATED_ARTISTS"]!!.jsonObject
+                        val jArray = jObject["data"]!!.jsonArray
+                        val data = jArray.toMediaItemsContainer(name = "Related Artists")
+                        dataList.add(data)
+                    }
+
+                    "ALBUMS" -> {
+                        val jObject = resultsObject["ALBUMS"]!!.jsonObject
+                        val jArray = jObject["data"]!!.jsonArray
+                        val data = jArray.toMediaItemsContainer(name = "Albums")
+                        dataList.add(data)
+                    }
                 }
             }
-            }
-        dataList
+            dataList
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     override suspend fun loadArtist(small: Artist): Artist {
-        val jsonObject = api.artist(small)
+        val jsonObject = api.artist(small.id)
         val resultsObject = jsonObject["results"]!!.jsonObject["DATA"]!!.jsonObject
         return resultsObject.toArtist(isFollowingArtist(small.id), true)
     }

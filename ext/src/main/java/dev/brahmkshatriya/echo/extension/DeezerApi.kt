@@ -33,6 +33,7 @@ import java.math.BigInteger
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.security.MessageDigest
+import java.util.Locale
 import java.util.UUID
 import java.util.zip.GZIPInputStream
 
@@ -56,10 +57,10 @@ class DeezerApi {
     }
 
     private val language: String
-        get() = DeezerUtils.settings?.getString("lang") ?: "en-US"
+        get() = DeezerUtils.settings?.getString("lang") ?: Locale.getDefault().toLanguageTag()
 
     private val country: String
-        get() = DeezerUtils.settings?.getString("country") ?: "en-US"
+        get() = DeezerUtils.settings?.getString("country") ?: Locale.getDefault().country
 
     private val credentials: DeezerCredentials
         get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
@@ -298,7 +299,7 @@ class DeezerApi {
         }
     }
 
-    suspend fun getMP3MediaUrl(track: Track): JsonObject = withContext(Dispatchers.IO) {
+    suspend fun getMP3MediaUrl(track: Track): List<JsonObject> = withContext(Dispatchers.IO) {
         val headers = Headers.Builder().apply {
             add("Accept-Encoding", "gzip")
             add("Accept-Language", language.substringBefore("-"))
@@ -344,42 +345,42 @@ class DeezerApi {
         val response = clientNP.newCall(request).execute()
         val responseBody = response.body.string()
 
-        json.decodeFromString<JsonObject>(responseBody)
+        listOf(json.decodeFromString<JsonObject>(responseBody))
     }
 
-    suspend fun getMediaUrl(track: Track, quality: String): JsonObject = withContext(Dispatchers.IO) {
+    suspend fun getMediaUrl(track: Track, quality: String): List<JsonObject> = withContext(Dispatchers.IO) {
         val url = HttpUrl.Builder()
             .scheme("https")
             .host("dzmedia.fly.dev")
             .addPathSegment("get_url")
             .build()
 
-        val formats = if (quality == "128") {
+        val formats = mutableListOf(
+            arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC"),
+            arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC"),
             arrayOf("MP3_128", "MP3_64", "MP3_MISC")
-        } else {
-            if (quality == "flac") {
-                arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
-            } else {
-                arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
-            }
+        )
+
+        val responseBodies = formats.map { format ->
+            val requestBody = json.encodeToString(
+                buildJsonObject {
+                    put("formats", buildJsonArray { format.forEach { add(it) } })
+                    put("ids", buildJsonArray { add(track.id.toLong()) })
+                }
+            ).toRequestBody("application/json; charset=utf-8".toMediaType())
+
+            val request = Request.Builder()
+                .url(url)
+                .post(requestBody)
+                .build()
+
+            val response = clientNP.newCall(request).execute()
+            response.body.string()
         }
 
-        val requestBody = json.encodeToString(
-            buildJsonObject {
-                put("formats", buildJsonArray { formats.forEach { add(it) } })
-                put ("ids", buildJsonArray{ add(track.id.toLong()) })
-            }
-        ).toRequestBody("application/json; charset=utf-8".toMediaType())
-
-        val request = Request.Builder()
-            .url(url)
-            .post(requestBody)
-            .build()
-
-        val response = clientNP.newCall(request).execute()
-        val responseBody = response.body.string()
-
-        json.decodeFromString<JsonObject>(responseBody)
+        responseBodies.map {
+            json.decodeFromString<JsonObject>(it)
+        }
     }
 
     suspend fun search(query: String): JsonObject {
@@ -473,11 +474,11 @@ class DeezerApi {
         )
     }
 
-    suspend fun artist(artist: Artist): JsonObject {
+    suspend fun artist(id: String): JsonObject {
         val jsonData = callApi(
             method = "deezer.pageArtist",
             params = buildJsonObject {
-                put("art_id", artist.id)
+                put("art_id", id)
                 put ("lang", language.substringBefore("-"))
             }
         )
