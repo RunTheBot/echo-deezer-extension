@@ -104,27 +104,32 @@ fun getByteStreamAudio(
                 clientWithTimeouts.newCall(request).executeAsync().use { response ->
                     response.body.byteStream().buffered().use { byteStream ->
                         try {
-                            val buffer = ByteArray(2048)
                             var totalBytesRead = 0L
                             var counter = 0
 
                             while (totalBytesRead < contentLength) {
-                                val bytesRead = byteStream.read(buffer)
+                                val buffer = ByteArray(2048)
+                                var bytesRead = 0
+                                var totalRead = 0
+                                while (bytesRead != -1 && totalRead != 2048) {
+                                    bytesRead = byteStream.read(buffer, totalRead, 2048 - totalRead)
+                                    if(bytesRead != -1)
+                                        totalRead += bytesRead
+                                }
+                                if (totalRead == 0) break
 
-                                if (bytesRead == -1) break
-
-                                totalBytesRead += bytesRead
-
-                                if(bytesRead < 2048) {
-                                    val partialBuffer = buffer.copyOf(bytesRead)
-                                    pipedOutputStream.write(partialBuffer, 0, bytesRead)
-                                } else if ((counter % 3) == 0) {
-                                    val decryptedChunk = Utils.decryptBlowfish(buffer, key)
-                                    pipedOutputStream.write(decryptedChunk, 0, decryptedChunk.size)
+                                if (totalRead != 2048) {
+                                    pipedOutputStream.write(buffer, 0, totalRead)
                                 } else {
-                                    pipedOutputStream.write(buffer, 0, bytesRead)
+                                    if ((counter % 3) == 0) {
+                                        val decryptedChunk = Utils.decryptBlowfish(buffer, key)
+                                        pipedOutputStream.write(decryptedChunk, 0, 2048)
+                                    } else {
+                                        pipedOutputStream.write(buffer, 0, 2048)
+                                    }
                                 }
 
+                                totalBytesRead += totalRead
                                 counter++
                                 pipedOutputStream.flush()
                             }
