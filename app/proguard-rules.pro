@@ -21,3 +21,4 @@
 #-renamesourcefileattribute SourceFile
 
 -keep class dev.brahmkshatriya.echo.** { *; }
+-dontwarn org.slf4j.impl.StaticLoggerBinder

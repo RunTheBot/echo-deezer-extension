@@ -485,41 +485,39 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
             url
         }
 
-        val jsonObjects = jsonObjectDeferred.await()
-        val urls = jsonObjects.map { jsonObject ->
-            when {
-                jsonObject.toString()
-                    .contains("Track token has no sufficient rights on requested media") -> {
-                    val dataObject = fetchTrackData(track)
-                    val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
-                    val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-                    generateUrl(track.id, md5Origin, mediaVersion)
-                }
+        val jsonObject = jsonObjectDeferred.await()
+        val url = when {
+            jsonObject.toString()
+                .contains("Track token has no sufficient rights on requested media") -> {
+                val dataObject = fetchTrackData(track)
+                val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
+                val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
+                generateUrl(track.id, md5Origin, mediaVersion)
+            }
 
-                track.extras["FILESIZE_MP3_MISC"] != "0" && track.extras["FILESIZE_MP3_MISC"] != null && jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
-                    val dataObject = fetchTrackData(track)
-                    val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
-                    val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-                    generateUrl(track.id, md5Origin, mediaVersion)
-                }
+            track.extras["FILESIZE_MP3_MISC"] != "0" && track.extras["FILESIZE_MP3_MISC"] != null && jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
+                val dataObject = fetchTrackData(track)
+                val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
+                val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
+                generateUrl(track.id, md5Origin, mediaVersion)
+            }
 
-                jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
-                    val dataObject = fetchTrackData(track)
-                    val fallbackObject = dataObject["FALLBACK"]!!.jsonObject
-                    val backId = fallbackObject["SNG_ID"]?.jsonPrimitive?.content ?: ""
-                    val fallbackTrack = track.copy(id = backId)
-                    val newDataObject = fetchTrackData(fallbackTrack)
-                    val md5Origin = newDataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
-                    val mediaVersion = newDataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-                    generateUrl(track.id, md5Origin, mediaVersion)
-                }
+            jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
+                val dataObject = fetchTrackData(track)
+                val fallbackObject = dataObject["FALLBACK"]!!.jsonObject
+                val backId = fallbackObject["SNG_ID"]?.jsonPrimitive?.content ?: ""
+                val fallbackTrack = track.copy(id = backId)
+                val newDataObject = fetchTrackData(fallbackTrack)
+                val md5Origin = newDataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
+                val mediaVersion = newDataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
+                generateUrl(track.id, md5Origin, mediaVersion)
+            }
 
-                else -> {
-                    val dataObject = jsonObject["data"]!!.jsonArray.first().jsonObject
-                    val mediaObject = dataObject["media"]!!.jsonArray.first().jsonObject
-                    val sourcesObject = mediaObject["sources"]!!.jsonArray[0]
-                    sourcesObject.jsonObject["url"]!!.jsonPrimitive.content
-                }
+            else -> {
+                val dataObject = jsonObject["data"]!!.jsonArray.first().jsonObject
+                val mediaObject = dataObject["media"]!!.jsonArray.first().jsonObject
+                val sourcesObject = mediaObject["sources"]!!.jsonArray[0]
+                sourcesObject.jsonObject["url"]!!.jsonPrimitive.content
             }
         }
 
@@ -527,27 +525,19 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
             api.log(track)
         }
 
-        val streamables = urls.mapIndexed { index, url ->
-            Streamable.audio(
-                id = url,
-                quality = 0,
-                title =
-                    when(index) {
-                        0 -> "FLAC"
-                        1 -> "320kbps"
-                        2 -> "128kbps"
-                        else -> ""
-                    } ,
-                extra = mapOf("key" to key)
-            )
-        }
-
         Track(
             id = track.id,
             title = track.title,
             cover = newTrack.cover,
             artists = track.artists,
-            streamables = streamables
+            streamables = listOf(
+                Streamable.audio(
+                    id = url,
+                    quality = 0,
+                    title = track.title,
+                    extra = mapOf("key" to key)
+                )
+            )
         )
     }
 

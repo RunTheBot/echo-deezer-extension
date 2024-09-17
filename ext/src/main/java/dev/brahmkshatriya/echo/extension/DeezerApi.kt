@@ -299,7 +299,7 @@ class DeezerApi {
         }
     }
 
-    suspend fun getMP3MediaUrl(track: Track): List<JsonObject> = withContext(Dispatchers.IO) {
+    suspend fun getMP3MediaUrl(track: Track): JsonObject = withContext(Dispatchers.IO) {
         val headers = Headers.Builder().apply {
             add("Accept-Encoding", "gzip")
             add("Accept-Language", language.substringBefore("-"))
@@ -345,42 +345,44 @@ class DeezerApi {
         val response = clientNP.newCall(request).execute()
         val responseBody = response.body.string()
 
-        listOf(json.decodeFromString<JsonObject>(responseBody))
+       json.decodeFromString<JsonObject>(responseBody)
     }
 
-    suspend fun getMediaUrl(track: Track, quality: String): List<JsonObject> = withContext(Dispatchers.IO) {
+    suspend fun getMediaUrl(track: Track, quality: String): JsonObject = withContext(Dispatchers.IO) {
         val url = HttpUrl.Builder()
             .scheme("https")
             .host("dzmedia.fly.dev")
             .addPathSegment("get_url")
             .build()
 
-        val formats = mutableListOf(
-            arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC"),
-            arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC"),
+        val formats = if (quality == "128") {
+
+
             arrayOf("MP3_128", "MP3_64", "MP3_MISC")
-        )
-
-        val responseBodies = formats.map { format ->
-            val requestBody = json.encodeToString(
-                buildJsonObject {
-                    put("formats", buildJsonArray { format.forEach { add(it) } })
-                    put("ids", buildJsonArray { add(track.id.toLong()) })
-                }
-            ).toRequestBody("application/json; charset=utf-8".toMediaType())
-
-            val request = Request.Builder()
-                .url(url)
-                .post(requestBody)
-                .build()
-
-            val response = clientNP.newCall(request).execute()
-            response.body.string()
+        } else {
+            if (quality == "flac") {
+                arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
+            } else {
+                arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
+            }
         }
 
-        responseBodies.map {
-            json.decodeFromString<JsonObject>(it)
-        }
+        val requestBody = json.encodeToString(
+            buildJsonObject {
+                put("formats", buildJsonArray { formats.forEach { add(it) } })
+                put ("ids", buildJsonArray{ add(track.id.toLong()) })
+            }
+        ).toRequestBody("application/json; charset=utf-8".toMediaType())
+
+        val request = Request.Builder()
+            .url(url)
+            .post(requestBody)
+            .build()
+
+        val response = clientNP.newCall(request).execute()
+        val responseBody = response.body.string()
+
+        json.decodeFromString<JsonObject>(responseBody)
     }
 
     suspend fun search(query: String): JsonObject {

@@ -2,10 +2,11 @@ package dev.brahmkshatriya.echo.extension
 
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toMedia
+import io.ktor.utils.io.ByteChannel
+import io.ktor.utils.io.close
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
@@ -14,8 +15,6 @@ import okhttp3.Request
 import okhttp3.coroutines.executeAsync
 import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.io.PipedInputStream
-import java.io.PipedOutputStream
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -88,84 +87,74 @@ fun getByteStreamAudio(
     val key = streamable.extra["key"] ?: ""
 
     val request = Request.Builder().url(url).build()
-    val pipedInputStream = PipedInputStream()
 
     val clientWithTimeouts = client.newBuilder()
         .readTimeout(0, TimeUnit.SECONDS)
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(0, TimeUnit.SECONDS)
+        .writeTimeout(0, TimeUnit.SECONDS)
         .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
-        .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
+        .protocols(listOf(Protocol.HTTP_1_1))
         .build()
 
+    val byteChannel = ByteChannel()
+
     scope.launch(Dispatchers.IO) {
-        retry(3) {
-            PipedOutputStream(pipedInputStream).use { pipedOutputStream ->
-                clientWithTimeouts.newCall(request).executeAsync().use { response ->
-                    response.body.byteStream().buffered().use { byteStream ->
-                        try {
-                            var totalBytesRead = 0L
-                            var counter = 0
+        try {
+            clientWithTimeouts.newCall(request).executeAsync().use { response ->
+                response.body.byteStream().buffered().use { byteStream ->
+                    try {
+                        var totalBytesRead = 0L
+                        var counter = 0
 
-                            while (totalBytesRead < contentLength) {
-                                val buffer = ByteArray(2048)
-                                var bytesRead = 0
-                                var totalRead = 0
-                                while (bytesRead != -1 && totalRead != 2048) {
-                                    bytesRead = byteStream.read(buffer, totalRead, 2048 - totalRead)
-                                    if(bytesRead != -1)
-                                        totalRead += bytesRead
-                                }
-                                if (totalRead == 0) break
+                        while (totalBytesRead < contentLength) {
+                            val buffer = ByteArray(2048)
+                            var bytesRead: Int
+                            var totalRead = 0
 
+                            while (totalRead < buffer.size) {
+                                bytesRead =
+                                    byteStream.read(buffer, totalRead, buffer.size - totalRead)
+                                if (bytesRead == -1) break
+                                totalRead += bytesRead
+                            }
+
+                            if (totalRead == 0) break
+
+                            try {
                                 if (totalRead != 2048) {
-                                    pipedOutputStream.write(buffer, 0, totalRead)
+                                    byteChannel.writeFully(buffer, 0, totalRead)
                                 } else {
                                     if ((counter % 3) == 0) {
                                         val decryptedChunk = Utils.decryptBlowfish(buffer, key)
-                                        pipedOutputStream.write(decryptedChunk, 0, 2048)
+                                        byteChannel.writeFully(decryptedChunk, 0, totalRead)
                                     } else {
-                                        pipedOutputStream.write(buffer, 0, 2048)
+                                        byteChannel.writeFully(buffer, 0, totalRead)
                                     }
                                 }
-
-                                totalBytesRead += totalRead
-                                counter++
-                                pipedOutputStream.flush()
-                            }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        } finally {
-                            try {
-                                response.close()
-                                byteStream.close()
-                                pipedOutputStream.close()
                             } catch (e: IOException) {
-                                e.printStackTrace()
+                                println("Channel closed while writing, aborting.")
+                                break
                             }
+                            totalBytesRead += totalRead
+                            counter++
                         }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        throw IOException("Error while reading/writing stream: ${e.message}", e)
+                    } finally {
+                        byteChannel.close()
                     }
                 }
             }
+        } catch (e: IOException) {
+            println("Exception during decryption or streaming: ${e.message}")
         }
     }
 
-    return Streamable.Audio.ByteStream(
-        stream = pipedInputStream,
+    return Streamable.Audio.Channel(
+        channel = byteChannel,
         totalBytes = contentLength
     ).toMedia()
-}
-
-suspend fun retry(times: Int, delayMillis: Long = 1000, block: suspend () -> Unit) {
-    repeat(times) {
-        try {
-            block()
-            return
-        } catch (e: Exception) {
-            if (it == times - 1) throw e
-            delay(delayMillis)
-        }
-    }
 }
 
 @Suppress("NewApi", "GetInstance")
