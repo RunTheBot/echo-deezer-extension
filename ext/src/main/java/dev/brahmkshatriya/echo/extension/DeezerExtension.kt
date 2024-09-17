@@ -9,7 +9,9 @@ import dev.brahmkshatriya.echo.common.clients.LibraryClient
 import dev.brahmkshatriya.echo.common.clients.LoginClient
 import dev.brahmkshatriya.echo.common.clients.LyricsClient
 import dev.brahmkshatriya.echo.common.clients.PlaylistClient
+import dev.brahmkshatriya.echo.common.clients.PlaylistEditClient
 import dev.brahmkshatriya.echo.common.clients.RadioClient
+import dev.brahmkshatriya.echo.common.clients.SaveToLibraryClient
 import dev.brahmkshatriya.echo.common.clients.SearchClient
 import dev.brahmkshatriya.echo.common.clients.ShareClient
 import dev.brahmkshatriya.echo.common.clients.TrackClient
@@ -61,7 +63,8 @@ import java.util.Locale
 
 class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClient, SearchClient, AlbumClient, ArtistClient,
     ArtistFollowClient, PlaylistClient, LyricsClient, ShareClient, LoginClient.WebView.Cookie,
-    LoginClient.UsernamePassword, LoginClient.CustomTextInput, LibraryClient {
+    LoginClient.UsernamePassword, LoginClient.CustomTextInput, LibraryClient, PlaylistEditClient,
+    SaveToLibraryClient {
 
     private val json = Json { isLenient = true; ignoreUnknownKeys = true }
     private val client = OkHttpClient()
@@ -320,6 +323,62 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
     override suspend fun removeTracksFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) {
         handleArlExpiration()
         api.removeFromPlaylist(playlist, tracks, indexes)
+    }
+
+    override suspend fun isSavedToLibrary(mediaItem: EchoMediaItem): Boolean {
+        suspend fun isItemSaved(
+            getItems: suspend () -> JsonObject,
+            idKey: String,
+            itemId: String
+        ): Boolean {
+            val dataArray = getItems()["results"]?.jsonObject
+                ?.get("TAB")?.jsonObject
+                ?.values?.firstOrNull()?.jsonObject
+                ?.get("data")?.jsonArray ?: return false
+
+            return dataArray.any { item ->
+                val id = item.jsonObject[idKey]?.jsonPrimitive?.content
+                id == itemId
+            }
+        }
+
+        return when (mediaItem) {
+            is EchoMediaItem.Lists.AlbumItem -> {
+                isItemSaved(api::getAlbums, "ALB_ID", mediaItem.album.id)
+            }
+            is EchoMediaItem.Lists.PlaylistItem -> {
+                isItemSaved(api::getPlaylists, "PLAYLIST_ID", mediaItem.playlist.id)
+            }
+            else -> false
+        }
+    }
+
+    override suspend fun removeFromLibrary(mediaItem: EchoMediaItem) {
+        when(mediaItem) {
+            is EchoMediaItem.Lists.AlbumItem -> {
+                api.removeFavoriteAlbum(mediaItem.album.id)
+            }
+
+            is EchoMediaItem.Lists.PlaylistItem -> {
+                api.removeFavoritePlaylist(mediaItem.playlist.id)
+            }
+
+            else -> {}
+        }
+    }
+
+    override suspend fun saveToLibrary(mediaItem: EchoMediaItem) {
+        when(mediaItem) {
+            is EchoMediaItem.Lists.AlbumItem -> {
+                api.addFavoriteAlbum(mediaItem.album.id)
+            }
+
+            is EchoMediaItem.Lists.PlaylistItem -> {
+                api.addFavoriteAlbum(mediaItem.playlist.id)
+            }
+
+            else -> {}
+        }
     }
 
     //<============= Search =============>
@@ -903,19 +962,15 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
     }
 
     private suspend fun isFollowingArtist(id: String): Boolean {
-        val artObject = api.getArtists()
-        val resultObject = artObject["results"]!!.jsonObject
-        val tabObject = resultObject["TAB"]!!.jsonObject
-        val artistsObject = tabObject["artists"]!!.jsonObject
-        val dataArray = artistsObject["data"]!!.jsonArray
-        var isFollowing = false
-        dataArray.map { item ->
-            val artistId = item.jsonObject["ART_ID"]?.jsonPrimitive?.content ?: ""
-            if(artistId.contains(id)) {
-                isFollowing = true
-            }
+        val dataArray = api.getArtists()["results"]?.jsonObject
+            ?.get("TAB")?.jsonObject
+            ?.get("artists")?.jsonObject
+            ?.get("data")?.jsonArray ?: return false
+
+        return dataArray.any { item ->
+            val artistId = item.jsonObject["ART_ID"]?.jsonPrimitive?.content
+            artistId == id
         }
-        return isFollowing
     }
 
     override suspend fun followArtist(artist: Artist): Boolean {

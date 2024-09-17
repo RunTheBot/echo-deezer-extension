@@ -546,6 +546,24 @@ class DeezerApi {
         return json.decodeFromString<JsonObject>(jsonData)
     }
 
+    suspend fun addFavoriteAlbum(id: String) {
+        callApi(
+            method = "album.addFavorite",
+            params = buildJsonObject {
+                put("ALB_ID", id)
+            }
+        )
+    }
+
+    suspend fun removeFavoriteAlbum(id: String) {
+        callApi(
+            method = "album.deleteFavorite",
+            params = buildJsonObject {
+                put("ALB_ID", id)
+            }
+        )
+    }
+
     suspend fun show(album: Album): JsonObject {
         val jsonData = callApi(
             method = "deezer.pageShow",
@@ -597,6 +615,24 @@ class DeezerApi {
             }
         )
         return json.decodeFromString<JsonObject>(jsonData)
+    }
+
+    suspend fun addFavoritePlaylist(id: String) {
+        callApi(
+            method = "playlist.addFavorite",
+            params = buildJsonObject {
+                put("PARENT_PLAYLIST_ID", id)
+            }
+        )
+    }
+
+    suspend fun removeFavoritePlaylist(id: String) {
+        callApi(
+            method = "playlist.deleteFavorite",
+            params = buildJsonObject {
+                put("PARENT_PLAYLIST_ID", id)
+            }
+        )
     }
 
     suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) = coroutineScope {
