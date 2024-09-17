@@ -1,7 +1,6 @@
 package dev.brahmkshatriya.echo.extension
 
 import dev.brahmkshatriya.echo.common.models.Album
-import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Track
@@ -9,6 +8,7 @@ import dev.brahmkshatriya.echo.common.models.User
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -86,39 +86,32 @@ class DeezerApi {
     private val pass: String
         get() = credentials.pass
 
-    private val client: OkHttpClient get() = OkHttpClient.Builder().apply {
-        addInterceptor { chain ->
-            val originalResponse = chain.proceed(chain.request())
-            if (originalResponse.header("Content-Encoding") == "gzip") {
-                val gzipSource = GZIPInputStream(originalResponse.body.byteStream())
-                val decompressedBody = gzipSource.readBytes().toResponseBody(originalResponse.body.contentType())
-                originalResponse.newBuilder().body(decompressedBody).build()
-            } else {
-                originalResponse
+    private fun createOkHttpClient(useProxy: Boolean): OkHttpClient {
+        return OkHttpClient.Builder().apply {
+            addInterceptor { chain ->
+                val originalResponse = chain.proceed(chain.request())
+                if (originalResponse.header("Content-Encoding") == "gzip") {
+                    val gzipSource = GZIPInputStream(originalResponse.body.byteStream())
+                    val decompressedBody = gzipSource.readBytes()
+                        .toResponseBody(originalResponse.body.contentType())
+                    originalResponse.newBuilder().body(decompressedBody).build()
+                } else {
+                    originalResponse
+                }
             }
-        }
-        if (DeezerUtils.settings?.getBoolean("proxy") == true) {
-            proxy(
-                Proxy(
-                    Proxy.Type.HTTP,
-                    InetSocketAddress.createUnresolved("uk.proxy.murglar.app", 3128)
+            if (useProxy && DeezerUtils.settings?.getBoolean("proxy") == true) {
+                proxy(
+                    Proxy(
+                        Proxy.Type.HTTP,
+                        InetSocketAddress.createUnresolved("uk.proxy.murglar.app", 3128)
+                    )
                 )
-            )
-        }
-    }.build()
-
-    private val clientNP: OkHttpClient = OkHttpClient.Builder().apply {
-        addInterceptor { chain ->
-            val originalResponse = chain.proceed(chain.request())
-            if (originalResponse.header("Content-Encoding") == "gzip") {
-                val gzipSource = GZIPInputStream(originalResponse.body.byteStream())
-                val decompressedBody = gzipSource.readBytes().toResponseBody(originalResponse.body.contentType())
-                originalResponse.newBuilder().body(decompressedBody).build()
-            } else {
-                originalResponse
             }
-        }
-    }.build()
+        }.build()
+    }
+
+    private val client: OkHttpClient get() = createOkHttpClient(useProxy = true)
+    private val clientNP: OkHttpClient get() = createOkHttpClient(useProxy = false)
 
     private val json = Json {
         isLenient = true
@@ -176,6 +169,10 @@ class DeezerApi {
 
         val response = client.newCall(request).execute()
         val responseBody = response.body.string()
+
+        if (!response.isSuccessful) {
+            throw Exception("API call failed with status code ${response.code}: $responseBody")
+        }
 
         if (method == "deezer.getUserData") {
             response.headers.forEach {
@@ -602,9 +599,9 @@ class DeezerApi {
         return json.decodeFromString<JsonObject>(jsonData)
     }
 
-    suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) = withContext(Dispatchers.IO) {
+    suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) = coroutineScope {
         tracks.map { track ->
-            async {
+            async(Dispatchers.IO) {
                 callApi(
                     method = "playlist.addSongs",
                     params = buildJsonObject {
@@ -618,11 +615,11 @@ class DeezerApi {
         }.awaitAll()
     }
 
-    suspend fun removeFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) = withContext(Dispatchers.IO) {
+    suspend fun removeFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) = coroutineScope {
         val trackIds = tracks.map { it.id }
         val ids = indexes.map { index -> trackIds[index] }
         ids.map { id ->
-            async {
+            async(Dispatchers.IO) {
                 callApi(
                     method = "playlist.deleteSongs",
                     params = buildJsonObject {

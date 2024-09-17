@@ -133,7 +133,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
     )
 
     init {
-        initializeCredentialsIfNeeded()
+        initializeCredentials()
     }
 
     override fun setSettings(settings: Settings) {
@@ -148,19 +148,17 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
 
     override fun getHomeFeed(tab: Tab?): PagedData<MediaItemsContainer> = PagedData.Continuous {
         handleArlExpiration()
-        val dataList = mutableListOf<MediaItemsContainer>()
-        val sections = api.homePage()["results"]!!.jsonObject["sections"]!!.jsonArray
+        val homeSections  = api.homePage()["results"]?.jsonObject?.get("sections")?.jsonArray ?: JsonArray(emptyList())
 
-        coroutineScope {
-            sections.map { section ->
+        val dataList = coroutineScope {
+            homeSections .map { section ->
                 async {
                     val id = section.jsonObject["module_id"]!!.jsonPrimitive.content
                     if (isSupportedSection(id)) {
-                        val data = section.toMediaItemsContainer(section.jsonObject["title"]!!.jsonPrimitive.content)
-                        dataList.add(data)
-                    }
+                        section.toMediaItemsContainer(section.jsonObject["title"]!!.jsonPrimitive.content)
+                    } else null
                 }
-            }.awaitAll()
+            }.awaitAll().filterNotNull()
         }
 
         Page(dataList, it)
@@ -181,6 +179,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
 
     //<============= Library =============>
 
+    @Volatile
     private var allTabs: Pair<String, List<MediaItemsContainer>>? = null
 
     override suspend fun getLibraryTabs(): List<Tab> {
@@ -218,7 +217,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
 
                     dataArray?.toMediaItemsContainer(tab.name)
                 }
-            }.awaitAll().filterNotNull() // Wait for all async operations to complete
+            }.awaitAll().filterNotNull()
         }
 
         return listOf(Tab("all", "All")) + tabs
@@ -355,6 +354,8 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
                         val queryItem = item.jsonObject["QUERY"]?.jsonPrimitive?.content
                         queryItem?.let { QuickSearchItem.SearchQueryItem(it, false) }
                     } ?: emptyList()
+                }.onFailure { exception ->
+                    throw Exception("Quick search failed for query: $query", exception)
                 }.getOrElse {
                     emptyList()
                 }
@@ -365,6 +366,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
         api.deleteSearchHistory()
     }
 
+    @Volatile
     private var oldSearch: Pair<String, List<MediaItemsContainer>>? = null
 
     override fun searchFeed(query: String?, tab: Tab?) = PagedData.Single {
@@ -783,10 +785,11 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
         val jsonObject = api.playlist(playlist)
         val resultsObject = jsonObject["results"]!!.jsonObject
         val songsObject = resultsObject["SONGS"]!!.jsonObject
-        val dataArray = songsObject["data"]!!.jsonArray
-        val data = dataArray.map { song ->
+        val dataArray = songsObject["data"]?.jsonArray ?: JsonArray(emptyList())
+        val data = dataArray.mapNotNull  { song ->
             song.jsonObject.toMediaItemsContainer(name = "")
         }
+        //data
         emptyList<MediaItemsContainer>()
     }
 
@@ -833,45 +836,57 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
             for (result in resultsObject) {
                 when (result.key) {
                     "TOP" -> {
-                        val jObject = resultsObject["TOP"]!!.jsonObject
-                        val jArray = jObject["data"]!!.jsonArray
-                        val data = jArray.toMediaItemsContainer(name = "Top")
-                        dataList.add(data)
+                        val jObject = resultsObject["TOP"]?.jsonObject
+                        val jArray = jObject?.get("data")?.jsonArray
+                        if (!jArray.isNullOrEmpty()) {
+                            val data = jArray.toMediaItemsContainer(name = "Top")
+                            dataList.add(data)
+                        }
                     }
 
                     "HIGHLIGHT" -> {
-                        val jObject = resultsObject["HIGHLIGHT"]!!.jsonObject
-                        val itemObject = jObject["ITEM"]!!.jsonObject
-                        val data = itemObject.toMediaItemsContainer(name = "Highlight")
-                        dataList.add(data)
+                        val jObject = resultsObject["HIGHLIGHT"]?.jsonObject
+                        val itemObject = jObject?.get("ITEM")?.jsonObject
+                        if (!itemObject.isNullOrEmpty()) {
+                            val data = itemObject.toMediaItemsContainer(name = "Highlight")
+                            dataList.add(data)
+                        }
                     }
 
                     "SELECTED_PLAYLIST" -> {
-                        val jObject = resultsObject["SELECTED_PLAYLIST"]!!.jsonObject
-                        val jArray = jObject["data"]!!.jsonArray
-                        val data = jArray.toMediaItemsContainer(name = "Selected Playlists")
-                        dataList.add(data)
+                        val jObject = resultsObject["SELECTED_PLAYLIST"]?.jsonObject
+                        val jArray = jObject?.get("data")?.jsonArray
+                        if (!jArray.isNullOrEmpty()) {
+                            val data = jArray.toMediaItemsContainer(name = "Selected Playlists")
+                            dataList.add(data)
+                        }
                     }
 
                     "RELATED_PLAYLIST" -> {
-                        val jObject = resultsObject["RELATED_PLAYLIST"]!!.jsonObject
-                        val jArray = jObject["data"]!!.jsonArray
-                        val data = jArray.toMediaItemsContainer(name = "Related Playlists")
-                        dataList.add(data)
+                        val jObject = resultsObject["RELATED_PLAYLIST"]?.jsonObject
+                        val jArray = jObject?.get("data")?.jsonArray
+                        if (!jArray.isNullOrEmpty()) {
+                            val data = jArray.toMediaItemsContainer(name = "Related Playlists")
+                            dataList.add(data)
+                        }
                     }
 
                     "RELATED_ARTISTS" -> {
-                        val jObject = resultsObject["RELATED_ARTISTS"]!!.jsonObject
-                        val jArray = jObject["data"]!!.jsonArray
-                        val data = jArray.toMediaItemsContainer(name = "Related Artists")
-                        dataList.add(data)
+                        val jObject = resultsObject["RELATED_ARTISTS"]?.jsonObject
+                        val jArray = jObject?.get("data")?.jsonArray
+                        if (!jArray.isNullOrEmpty()) {
+                            val data = jArray.toMediaItemsContainer(name = "Related Artists")
+                            dataList.add(data)
+                        }
                     }
 
                     "ALBUMS" -> {
-                        val jObject = resultsObject["ALBUMS"]!!.jsonObject
-                        val jArray = jObject["data"]!!.jsonArray
-                        val data = jArray.toMediaItemsContainer(name = "Albums")
-                        dataList.add(data)
+                        val jObject = resultsObject["ALBUMS"]?.jsonObject
+                        val jArray = jObject?.get("data")?.jsonArray
+                        if (!jArray.isNullOrEmpty()) {
+                            val data = jArray.toMediaItemsContainer(name = "Albums")
+                            dataList.add(data)
+                        }
                     }
                 }
             }
@@ -926,14 +941,18 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
     override val loginWebViewStopUrlRegex = "https://www\\.deezer\\.com/account/.*".toRegex()
 
     override suspend fun onLoginWebviewStop(url: String, data: String): List<User> {
-        if (data.contains("arl=")) {
-            DeezerCredentialsHolder.updateCredentials(arl = data.substringAfter("arl=").substringBefore(";"))
-            DeezerCredentialsHolder.updateCredentials(sid = data.substringAfter("sid=").substringBefore(";"))
-            val userList = api.makeUser()
-            return userList
+        val arl = extractCookieValue(data, "arl")
+        val sid = extractCookieValue(data, "sid")
+        if (arl != null && sid != null) {
+            DeezerCredentialsHolder.updateCredentials(arl = arl, sid = sid)
+            return api.makeUser()
         } else {
-            return emptyList()
+            throw Exception("Failed to retrieve ARL and SID from cookies")
         }
+    }
+
+    private fun extractCookieValue(data: String, key: String): String? {
+        return data.substringAfter("$key=").substringBefore(";").takeIf { it.isNotEmpty() }
     }
 
     override val loginInputFields: List<LoginClient.InputField>
@@ -966,13 +985,15 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
 
     override suspend fun onSetLoginUser(user: User?) {
         if (user != null) {
-            DeezerCredentialsHolder.updateCredentials(arl = user.extras["arl"] ?: "")
-            DeezerCredentialsHolder.updateCredentials(userId = user.extras["user_id"] ?: "")
-            DeezerCredentialsHolder.updateCredentials(sid = user.extras["sid"] ?: "")
-            DeezerCredentialsHolder.updateCredentials(token = user.extras["token"] ?: "")
-            DeezerCredentialsHolder.updateCredentials(licenseToken = user.extras["license_token"] ?: "")
-            DeezerCredentialsHolder.updateCredentials(email = user.extras["email"] ?: "")
-            DeezerCredentialsHolder.updateCredentials(pass = user.extras["pass"] ?: "")
+            DeezerCredentialsHolder.updateCredentials(
+                arl = user.extras["arl"] ?: "",
+                sid = user.extras["sid"] ?: "",
+                token = user.extras["token"] ?: "",
+                userId = user.extras["user_id"] ?: "",
+                licenseToken = user.extras["license_token"] ?: "",
+                email = user.extras["email"] ?: "",
+                pass = user.extras["pass"] ?: ""
+            )
         }
     }
 
@@ -991,10 +1012,18 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
 
     //<============= Utils =============>
 
-    private fun initializeCredentialsIfNeeded() {
+    private fun initializeCredentials() {
         if (DeezerCredentialsHolder.credentials == null) {
             DeezerCredentialsHolder.initialize(
-                DeezerCredentials(arl = "", sid = "", token = "", userId = "", licenseToken = "", email = "", pass = "")
+                DeezerCredentials(
+                    arl = "",
+                    sid = "",
+                    token = "",
+                    userId = "",
+                    licenseToken = "",
+                    email = "",
+                    pass = ""
+                )
             )
         }
     }

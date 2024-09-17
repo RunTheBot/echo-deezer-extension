@@ -105,6 +105,7 @@ object DeezerUtils {
 }
 
 object DeezerCredentialsHolder {
+    @Volatile
     private var _credentials: DeezerCredentials? = null
     val credentials: DeezerCredentials?
         get() = _credentials
@@ -117,16 +118,20 @@ object DeezerCredentialsHolder {
         }
     }
 
+    private val lock = Any()
+
     fun updateCredentials(arl: String? = null, sid: String? = null, token: String? = null, userId: String? = null, licenseToken: String? = null, email: String? = null, pass: String? = null) {
-        _credentials = _credentials?.copy(
-            arl = arl ?: _credentials!!.arl,
-            sid = sid ?: _credentials!!.sid,
-            token = token ?: _credentials!!.token,
-            userId = userId ?: _credentials!!.userId,
-            licenseToken = licenseToken ?: _credentials!!.licenseToken,
-            email = email ?: _credentials!!.email,
-            pass = pass ?: _credentials!!.pass
-        ) ?: throw IllegalStateException("Credentials are not initialized")
+        synchronized(lock) {
+            _credentials = _credentials?.copy(
+                arl = arl ?: _credentials!!.arl,
+                sid = sid ?: _credentials!!.sid,
+                token = token ?: _credentials!!.token,
+                userId = userId ?: _credentials!!.userId,
+                licenseToken = licenseToken ?: _credentials!!.licenseToken,
+                email = email ?: _credentials!!.email,
+                pass = pass ?: _credentials!!.pass
+            ) ?: throw IllegalStateException("Credentials are not initialized")
+        }
     }
 }
 
