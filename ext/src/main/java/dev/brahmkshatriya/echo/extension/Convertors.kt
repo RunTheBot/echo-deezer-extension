@@ -7,6 +7,7 @@ import dev.brahmkshatriya.echo.common.models.ImageHolder
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.models.MediaItemsContainer
 import dev.brahmkshatriya.echo.common.models.Playlist
+import dev.brahmkshatriya.echo.common.models.Radio
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Track
 import kotlinx.serialization.json.JsonArray
@@ -51,6 +52,7 @@ fun JsonObject.toEchoMediaItem(): EchoMediaItem? {
         "artist" in type -> EchoMediaItem.Profile.ArtistItem(toArtist())
         "show" in type -> EchoMediaItem.Lists.AlbumItem(toShow())
         "episode" in type -> EchoMediaItem.TrackItem(toEpisode())
+        "flow" in type -> EchoMediaItem.Lists.RadioItem(toRadio())
         else -> null
     }
 }
@@ -136,7 +138,7 @@ fun JsonObject.toArtist(isFollowing: Boolean = false, loaded: Boolean = false): 
 fun JsonObject.toTrack(): Track {
     val data = this["data"]?.jsonObject ?: this
     val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content.orEmpty()
-    val artistObject = data["ARTISTS"]?.jsonArray?.firstOrNull()?.jsonObject ?: this
+    val artistObject = data["ARTISTS"]?.jsonArray?.firstOrNull()?.jsonObject ?: data
     val artistMd5 = artistObject["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty()
     return Track(
         id = data["SNG_ID"]?.jsonPrimitive?.content.orEmpty(),
@@ -187,6 +189,21 @@ fun JsonObject.toPlaylist(loaded: Boolean = false): Playlist {
         subtitle = this["subtitle"]?.jsonPrimitive?.content.orEmpty(),
         isEditable = data["PARENT_USER_ID"]?.jsonPrimitive?.content == DeezerCredentialsHolder.credentials?.userId,
         tracks = data["NB_SONG"]?.jsonPrimitive?.int ?: 0
+    )
+}
+
+fun JsonObject.toRadio(loaded: Boolean = false): Radio {
+    val data = this["data"]?.jsonObject ?: this
+    val imageObject = this["pictures"]?.jsonArray?.firstOrNull()?.jsonObject.orEmpty()
+    val md5 = imageObject["md5"]?.jsonPrimitive?.content.orEmpty()
+    val type = imageObject["type"]?.jsonPrimitive?.content.orEmpty()
+    return Radio(
+        id = data["id"]?.jsonPrimitive?.content.orEmpty(),
+        title = data["title"]?.jsonPrimitive?.content.orEmpty(),
+        cover = getCover(md5, type, loaded),
+        extras = mapOf(
+            "radio" to "flow"
+        )
     )
 }
 

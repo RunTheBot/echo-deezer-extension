@@ -753,6 +753,10 @@ class DeezerApi {
                 ctxtT = "up_next_artist"
                 track.extras["artist_id"]
             }
+            !track.extras["user_id"].isNullOrEmpty() -> {
+                ctxtT = "dynamic_page_user_radio"
+                userId
+            }
             else -> {
                 ctxtT = ""
                 ""
@@ -817,6 +821,19 @@ class DeezerApi {
                 put("art_id", artistId)
                 put("limit", 10)
                 put("sng_id", trackId)
+            }
+        )
+        return json.decodeFromString<JsonObject>(jsonData)
+    }
+
+    suspend fun flow(id: String): JsonObject {
+        val jsonData = callApi(
+            method = "radio.getUserRadio",
+            params = buildJsonObject {
+                if (id != "default") {
+                    put("config_id", id)
+                }
+                put("user_id", userId)
             }
         )
         return json.decodeFromString<JsonObject>(jsonData)

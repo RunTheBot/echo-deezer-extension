@@ -18,11 +18,13 @@ import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.ClientException
+import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.Lyric
 import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.common.models.MediaItemsContainer
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.QuickSearchItem
+import dev.brahmkshatriya.echo.common.models.Radio
 import dev.brahmkshatriya.echo.common.models.Request.Companion.toRequest
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Streamable.Audio.Companion.toAudio
@@ -166,6 +168,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
 
 
     private fun isSupportedSection(id: String) = listOf(
+        "b21892d3-7e9c-4b06-aff6-2c3be3266f68",
         "348128f5-bed6-4ccb-9a37-8e5f5ed08a62",
         "8d10a320-f130-4dcb-a610-38baf0c57896",
         "2a7e897f-9bcf-4563-8e11-b93a601766e1",
@@ -545,28 +548,131 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
 
     //<============= Radio =============>
 
-    override suspend fun radio(track: Track): Playlist {
-        return Playlist(
-            id = track.id,
-            title = track.title,
-            cover = track.cover,
-            isEditable = false,
-            extras = mapOf(
-                "radio" to "track"
+    override fun loadTracks(radio: Radio): PagedData<Track> = PagedData.Single {
+        val dataArray = when (radio.extras["radio"]) {
+            "track" -> {
+                val jsonObject = api.mix(radio.id)
+                jsonObject["results"]!!.jsonObject["data"]!!.jsonArray
+            }
+
+            "playlist", "album" -> {
+                val jsonObject = api.radio(radio.id, radio.extras["artist"] ?: "")
+                jsonObject["results"]!!.jsonObject["data"]!!.jsonArray
+            }
+
+            else -> {
+                val jsonObject = api.flow(radio.id)
+                jsonObject["results"]!!.jsonObject["data"]!!.jsonArray
+            }
+        }
+
+        dataArray.mapIndexed { index, song ->
+            val track = song.jsonObject.toTrack()
+            val nextTrack = dataArray.getOrNull(index + 1)?.jsonObject?.toTrack()
+            val nextTrackId = nextTrack?.id
+
+            Track(
+                id = track.id,
+                title = track.title,
+                cover = track.cover,
+                duration = track.duration,
+                releaseDate = track.releaseDate,
+                artists = track.artists,
+                extras = track.extras.plus(
+                    mapOf(
+                        "NEXT" to (nextTrackId ?: ""),
+                        when (radio.extras["radio"]) {
+                            "track" -> "artist_id" to track.artists[0].id
+                            "playlist", "album" -> "artist_id" to (radio.extras["artist"] ?: "")
+                            else -> "user_id" to "0"
+                        }
+                    )
+                )
             )
-        )
+        }
     }
 
-    override suspend fun radio(album: Album): Playlist {
+    override suspend fun radio(track: Track, context: EchoMediaItem?): Radio {
+        return when(context) {
+            null -> {
+                Radio(
+                    id = track.id,
+                    title = track.title,
+                    cover = track.cover,
+                    extras = mapOf(
+                        "radio" to "track"
+                    )
+                )
+            }
+
+            is EchoMediaItem.Lists.RadioItem -> {
+                when(context.radio.extras["radio"]) {
+                    "track" -> {
+                        Radio(
+                            id = track.id,
+                            title = track.title,
+                            cover = track.cover,
+                            extras = mapOf(
+                                "radio" to "track"
+                            )
+                        )
+                    }
+
+                    "playlist", "album" -> {
+                        Radio(
+                            id = track.id,
+                            title = track.title,
+                            cover = track.cover,
+                            extras = mapOf(
+                                ("radio" to context.radio.extras["radio"].orEmpty()),
+                                "artist" to track.artists[0].id
+                            )
+                        )
+                    }
+
+                    else -> {
+                        context.radio
+                    }
+                }
+            }
+
+            is EchoMediaItem.Lists.PlaylistItem -> {
+                Radio(
+                    id = track.id,
+                    title = track.title,
+                    cover = track.cover,
+                    extras = mapOf(
+                        "radio" to "playlist",
+                        "artist" to track.artists[0].id
+                    )
+                )
+            }
+
+            is EchoMediaItem.Lists.AlbumItem -> {
+                Radio(
+                    id = track.id,
+                    title = track.title,
+                    cover = track.cover,
+                    extras = mapOf(
+                        "radio" to "album",
+                        "artist" to track.artists[0].id
+                    )
+                )
+            }
+
+            else -> throw Exception("Radio Error")
+        }
+    }
+
+    override suspend fun radio(album: Album): Radio {
         val jsonObject = api.album(album)
         val resultsObject = jsonObject["results"]!!.jsonObject
         val songsObject = resultsObject["SONGS"]!!.jsonObject
         val lastTrack = songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack()
-        return Playlist(
+        return Radio(
             id = lastTrack.id,
             title = lastTrack.title,
             cover = lastTrack.cover,
-            isEditable = false,
             extras = mapOf(
                 "radio" to "album",
                 "artist" to lastTrack.artists[0].id
@@ -574,24 +680,23 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
         )
     }
 
-    override suspend fun radio(artist: Artist): Playlist {
-        TODO("Not yet implemented")
+    override suspend fun radio(artist: Artist): Radio {
+        TODO("Not Planned")
     }
 
-    override suspend fun radio(user: User): Playlist {
-        TODO("Not yet implemented")
+    override suspend fun radio(user: User): Radio {
+        TODO("Not Planned")
     }
 
-    override suspend fun radio(playlist: Playlist): Playlist {
+    override suspend fun radio(playlist: Playlist): Radio {
         val jsonObject = api.playlist(playlist)
         val resultsObject = jsonObject["results"]!!.jsonObject
         val songsObject = resultsObject["SONGS"]!!.jsonObject
         val lastTrack = songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack()
-        return Playlist(
+        return Radio(
             id = lastTrack.id,
             title = lastTrack.title,
             cover = lastTrack.cover,
-            isEditable = false,
             extras = mapOf(
                 "radio" to "playlist",
                 "artist" to lastTrack.artists[0].id
@@ -692,20 +797,8 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
     }
 
     override fun loadTracks(playlist: Playlist): PagedData<Track> = PagedData.Single {
-        val dataArray = when (playlist.extras["radio"]) {
-            "track" -> {
-                val jsonObject = api.mix(playlist.id)
-                jsonObject["results"]!!.jsonObject["data"]!!.jsonArray
-            }
-            "playlist", "album" -> {
-                val jsonObject = api.radio(playlist.id, playlist.extras["artist"] ?: "")
-                jsonObject["results"]!!.jsonObject["data"]!!.jsonArray
-            }
-            else -> {
-                val jsonObject = api.playlist(playlist)
-                jsonObject["results"]!!.jsonObject["SONGS"]!!.jsonObject["data"]!!.jsonArray
-            }
-        }
+        val jsonObject = api.playlist(playlist)
+        val dataArray = jsonObject["results"]!!.jsonObject["SONGS"]!!.jsonObject["data"]!!.jsonArray
 
         dataArray.mapIndexed { index, song ->
             val currentTrack = song.jsonObject.toTrack()
@@ -722,11 +815,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
                 extras = currentTrack.extras.plus(
                     mapOf(
                         "NEXT" to (nextTrackId ?: ""),
-                        when (playlist.extras["radio"]) {
-                            "track" -> "artist_id" to currentTrack.artists[0].id
-                            "playlist", "album" -> "artist_id" to (playlist.extras["artist"] ?: "")
-                            else -> "playlist_id" to playlist.id
-                        }
+                        "playlist_id" to playlist.id
                     )
                 )
             )
@@ -889,15 +978,16 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
 
     //<============= Share =============>
 
-    override suspend fun onShare(album: Album): String = "https://www.deezer.com/album/${album.id}"
-
-    override suspend fun onShare(artist: Artist): String = "https://www.deezer.com/artist/${artist.id}"
-
-    override suspend fun onShare(playlist: Playlist): String = "https://www.deezer.com/playlist/${playlist.id}"
-
-    override suspend fun onShare(track: Track): String = "https://www.deezer.com/track/${track.id}"
-
-    override suspend fun onShare(user: User): String = "https://www.deezer.com/profile/${user.id}"
+    override suspend fun onShare(item: EchoMediaItem): String {
+        return when(item) {
+            is EchoMediaItem.TrackItem -> "https://www.deezer.com/track/${item.id}"
+            is EchoMediaItem.Profile.ArtistItem -> "https://www.deezer.com/artist/${item.id}"
+            is EchoMediaItem.Profile.UserItem -> "https://www.deezer.com/profile/${item.id}"
+            is EchoMediaItem.Lists.AlbumItem -> "https://www.deezer.com/album/${item.id}"
+            is EchoMediaItem.Lists.PlaylistItem -> "https://www.deezer.com/playlist/${item.id}"
+            is EchoMediaItem.Lists.RadioItem -> TODO()
+        }
+    }
 
     //<============= Utils =============>
 
