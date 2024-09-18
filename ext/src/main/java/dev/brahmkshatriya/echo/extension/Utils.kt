@@ -77,7 +77,7 @@ fun String.toMD5(): String {
 
 @Suppress("NewApi")
 @OptIn(ExperimentalCoroutinesApi::class)
-fun getByteStreamAudio(
+suspend fun getByteStreamAudio(
     scope: CoroutineScope,
     streamable: Streamable,
     client: OkHttpClient
@@ -97,11 +97,11 @@ fun getByteStreamAudio(
         .build()
 
     val byteChannel = ByteChannel()
+    val response = clientWithTimeouts.newCall(request).executeAsync()
 
     scope.launch(Dispatchers.IO) {
         try {
-            clientWithTimeouts.newCall(request).executeAsync().use { response ->
-                response.body.byteStream().buffered().use { byteStream ->
+                response.body.byteStream().use { byteStream ->
                     try {
                         var totalBytesRead = 0L
                         var counter = 0
@@ -145,7 +145,6 @@ fun getByteStreamAudio(
                         byteChannel.close()
                     }
                 }
-            }
         } catch (e: IOException) {
             println("Exception during decryption or streaming: ${e.message}")
         }
