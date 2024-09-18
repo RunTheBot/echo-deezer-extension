@@ -6,13 +6,11 @@ import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.close
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
-import okhttp3.coroutines.executeAsync
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.security.MessageDigest
@@ -75,8 +73,6 @@ fun String.toMD5(): String {
     return bytesToHex(bytes).lowercase()
 }
 
-@Suppress("NewApi")
-@OptIn(ExperimentalCoroutinesApi::class)
 suspend fun getByteStreamAudio(
     scope: CoroutineScope,
     streamable: Streamable,
@@ -97,7 +93,7 @@ suspend fun getByteStreamAudio(
         .build()
 
     val byteChannel = ByteChannel()
-    val response = clientWithTimeouts.newCall(request).executeAsync()
+    val response = clientWithTimeouts.newCall(request).execute()
 
     scope.launch(Dispatchers.IO) {
         try {
