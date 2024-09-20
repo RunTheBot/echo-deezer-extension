@@ -1,13 +1,14 @@
 package dev.brahmkshatriya.echo.extension
 
+import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.ImageHolder
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
-import dev.brahmkshatriya.echo.common.models.MediaItemsContainer
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Radio
+import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Track
 import kotlinx.serialization.json.JsonArray
@@ -20,25 +21,56 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 import java.util.Date
 
-fun JsonElement.toMediaItemsContainer(name: String = "Unknown"): MediaItemsContainer {
-    val itemsArray = jsonObject["items"]?.jsonArray ?: return MediaItemsContainer.Category(name, emptyList())
-    return MediaItemsContainer.Category(
+fun JsonElement.toShelfItemsList(name: String = "Unknown"): Shelf {
+    val itemsArray = jsonObject["items"]?.jsonArray ?: return Shelf.Lists.Items(name, emptyList())
+    return Shelf.Lists.Items(
         title = name,
         list = itemsArray.mapNotNull { it.jsonObject.toEchoMediaItem() }
     )
 }
 
-fun JsonObject.toMediaItemsContainer(name: String = "Unknown"): MediaItemsContainer {
-    return MediaItemsContainer.Category(
+fun JsonObject.toShelfItemsList(name: String = "Unknown"): Shelf {
+    return Shelf.Lists.Items(
         title = name,
         list = listOfNotNull(toEchoMediaItem())
     )
 }
 
-fun JsonArray.toMediaItemsContainer(name: String = "Unknown"): MediaItemsContainer {
-    return MediaItemsContainer.Category(
+fun JsonArray.toShelfItemsList(name: String = "Unknown"): Shelf {
+    return Shelf.Lists.Items(
         title = name,
         list = mapNotNull { it.jsonObject.toEchoMediaItem() }
+    )
+}
+
+fun JsonElement.toShelfCategoryList(name: String = "Unknown"): Shelf.Lists.Categories {
+    val itemsArray = jsonObject["items"]?.jsonArray ?: return  Shelf.Lists.Categories(name, emptyList())
+    return Shelf.Lists.Categories(
+        title = name,
+        list = itemsArray.mapNotNull { it.jsonObject.toShelfCategory() },
+        type = Shelf.Lists.Type.Grid
+    )
+}
+
+fun JsonObject.toShelfCategory(): Shelf.Category? {
+    val data = this["data"]?.jsonObject ?: this
+    val type = data["__TYPE__"]?.jsonPrimitive?.content ?: return null
+    return when {
+        "channel" in type -> toChannel()
+        else -> null
+    }
+}
+
+fun JsonObject.toChannel(): Shelf.Category {
+    val data = this["data"]?.jsonObject ?: this
+    val title = data["title"]?.jsonPrimitive?.content.orEmpty()
+    val target = this["target"]?.jsonPrimitive?.content.orEmpty()
+    return Shelf.Category(
+        title = title,
+        items = PagedData.empty(),
+        extras = mapOf(
+            "target" to target
+        )
     )
 }
 
