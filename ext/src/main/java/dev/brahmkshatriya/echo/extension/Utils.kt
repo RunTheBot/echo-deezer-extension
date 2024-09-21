@@ -3,9 +3,10 @@ package dev.brahmkshatriya.echo.extension
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toMedia
 import io.ktor.utils.io.ByteChannel
-import io.ktor.utils.io.close
+import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
@@ -74,7 +75,7 @@ fun String.toMD5(): String {
 }
 
 suspend fun getByteStreamAudio(
-    scope: CoroutineScope,
+    scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     streamable: Streamable,
     client: OkHttpClient
 ): Streamable.Media {
@@ -82,7 +83,10 @@ suspend fun getByteStreamAudio(
     val contentLength = Utils.getContentLength(url, client)
     val key = streamable.extra["key"] ?: ""
 
-    val request = Request.Builder().url(url).build()
+    val request = Request.Builder()
+        .url(url)
+        .header("Connection", "keep-alive")
+        .build()
 
     val clientWithTimeouts = client.newBuilder()
         .readTimeout(0, TimeUnit.SECONDS)
@@ -92,54 +96,51 @@ suspend fun getByteStreamAudio(
         .protocols(listOf(Protocol.HTTP_1_1))
         .build()
 
-    val byteChannel = ByteChannel()
-    val response = clientWithTimeouts.newCall(request).execute()
+    val byteChannel = ByteChannel(true)
 
     scope.launch(Dispatchers.IO) {
+        val response = clientWithTimeouts.newCall(request).execute()
+        val byteStream = response.body.byteStream()
+
         try {
-            response.body.byteStream().use { byteStream ->
-                try {
-                    var totalBytesRead = 0L
-                    var counter = 0
+            try {
+                var totalBytesRead = 0L
+                var counter = 0
 
-                    while (totalBytesRead < contentLength) {
-                        val buffer = ByteArray(2048)
-                        var bytesRead: Int
-                        var totalRead = 0
+                while (totalBytesRead < contentLength) {
+                    val buffer = ByteArray(2048)
+                    var bytesRead: Int
+                    var totalRead = 0
 
-                        while (totalRead < buffer.size) {
-                            bytesRead =
-                                byteStream.read(buffer, totalRead, buffer.size - totalRead)
-                            if (bytesRead == -1) break
-                            totalRead += bytesRead
-                        }
-
-                        if (totalRead == 0) break
-
-                        try {
-                            if (totalRead != 2048) {
-                                byteChannel.writeFully(buffer, 0, totalRead)
-                            } else {
-                                if ((counter % 3) == 0) {
-                                    val decryptedChunk = Utils.decryptBlowfish(buffer, key)
-                                    byteChannel.writeFully(decryptedChunk, 0, totalRead)
-                                } else {
-                                    byteChannel.writeFully(buffer, 0, totalRead)
-                                }
-                            }
-                        } catch (e: IOException) {
-                            println("Channel closed while writing, aborting.")
-                            break
-                        }
-                        totalBytesRead += totalRead
-                        counter++
+                    while (totalRead < buffer.size) {
+                        bytesRead =
+                            byteStream.read(buffer, totalRead, buffer.size - totalRead)
+                        if (bytesRead == -1) break
+                        totalRead += bytesRead
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    throw IOException("Error while reading/writing stream: ${e.message}", e)
-                } finally {
-                    byteChannel.close()
+
+                    if (totalRead == 0) break
+
+                    try {
+                        if (totalRead != 2048) {
+                            byteChannel.writeFully(buffer, 0, totalRead)
+                        } else {
+                            if ((counter % 3) == 0) {
+                                val decryptedChunk = Utils.decryptBlowfish(buffer, key)
+                                byteChannel.writeFully(decryptedChunk, 0, totalRead)
+                            } else {
+                                byteChannel.writeFully(buffer, 0, totalRead)
+                            }
+                        }
+                    } catch (e: IOException) {
+                        println("Channel closed while writing, aborting.")
+                    }
+                    totalBytesRead += totalRead
+                    counter++
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                throw IOException("Error while reading/writing stream: ${e.message}", e)
             }
         } catch (e: IOException) {
             println("Exception during decryption or streaming: ${e.message}")

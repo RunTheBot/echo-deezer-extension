@@ -43,34 +43,36 @@ fun JsonArray.toShelfItemsList(name: String = "Unknown"): Shelf {
     )
 }
 
-fun JsonElement.toShelfCategoryList(name: String = "Unknown"): Shelf.Lists.Categories {
+fun JsonElement.toShelfCategoryList(name: String = "Unknown", block: suspend (String) -> List<Shelf>): Shelf.Lists.Categories {
     val itemsArray = jsonObject["items"]?.jsonArray ?: return  Shelf.Lists.Categories(name, emptyList())
     return Shelf.Lists.Categories(
         title = name,
-        list = itemsArray.mapNotNull { it.jsonObject.toShelfCategory() },
-        type = Shelf.Lists.Type.Grid
+        list = itemsArray.take(5).mapNotNull { it.jsonObject.toShelfCategory(block) },
+        type = Shelf.Lists.Type.Grid,
+        more = PagedData.Single {
+            itemsArray.mapNotNull { it.jsonObject.toShelfCategory(block) }
+        }
     )
 }
 
-fun JsonObject.toShelfCategory(): Shelf.Category? {
+fun JsonObject.toShelfCategory(block: suspend (String) -> List<Shelf>): Shelf.Category? {
     val data = this["data"]?.jsonObject ?: this
     val type = data["__TYPE__"]?.jsonPrimitive?.content ?: return null
     return when {
-        "channel" in type -> toChannel()
+        "channel" in type -> toChannel(block)
         else -> null
     }
 }
 
-fun JsonObject.toChannel(): Shelf.Category {
+fun JsonObject.toChannel(block: suspend (String) -> List<Shelf>): Shelf.Category {
     val data = this["data"]?.jsonObject ?: this
     val title = data["title"]?.jsonPrimitive?.content.orEmpty()
     val target = this["target"]?.jsonPrimitive?.content.orEmpty()
     return Shelf.Category(
         title = title,
-        items = PagedData.empty(),
-        extras = mapOf(
-            "target" to target
-        )
+        items = PagedData.Single {
+            block(target)
+        },
     )
 }
 
@@ -187,6 +189,7 @@ fun JsonObject.toTrack(): Track {
                 cover = getCover(artistMd5, "artist")
             )
         ),
+        isExplicit = data["EXPLICIT_LYRICS"]?.jsonPrimitive?.content?.equals("1") ?: false,
         extras = mapOf(
             "TRACK_TOKEN" to data["TRACK_TOKEN"]?.jsonPrimitive?.content.orEmpty(),
             "FILESIZE_MP3_MISC" to (data["FILESIZE_MP3_MISC"]?.jsonPrimitive?.content ?: "0"),
@@ -239,11 +242,11 @@ fun JsonObject.toRadio(loaded: Boolean = false): Radio {
     )
 }
 
-private val quality: Int get() = DeezerUtils.settings?.getInt("image_quality") ?: 240
+private val quality: Int? get() = DeezerUtils.settings?.getInt("image_quality")
 
 fun getCover(md5: String?, type: String?, loaded: Boolean = false): ImageHolder {
     if(loaded) {
-        val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/${quality}x$quality-000000-80-0-0.jpg"
+        val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/${quality ?: 240}x${quality ?: 240}-000000-80-0-0.jpg"
         return url.toImageHolder()
     } else {
         val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/264x264-000000-80-0-0.jpg"

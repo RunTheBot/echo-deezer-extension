@@ -15,6 +15,7 @@ import dev.brahmkshatriya.echo.common.clients.SaveToLibraryClient
 import dev.brahmkshatriya.echo.common.clients.SearchClient
 import dev.brahmkshatriya.echo.common.clients.ShareClient
 import dev.brahmkshatriya.echo.common.clients.TrackClient
+import dev.brahmkshatriya.echo.common.clients.TrackLikeClient
 import dev.brahmkshatriya.echo.common.helpers.Page
 import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
@@ -45,6 +46,7 @@ import dev.brahmkshatriya.echo.extension.DeezerCountries.getDefaultLanguageIndex
 import dev.brahmkshatriya.echo.extension.DeezerUtils.settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -61,7 +63,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.Locale
 
-class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClient, SearchClient, AlbumClient, ArtistClient,
+class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeClient, RadioClient, SearchClient, AlbumClient, ArtistClient,
     ArtistFollowClient, PlaylistClient, LyricsClient, ShareClient, LoginClient.WebView.Cookie,
     LoginClient.UsernamePassword, LoginClient.CustomTextInput, LibraryClient, PlaylistEditClient,
     SaveToLibraryClient {
@@ -105,6 +107,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
                     "Image Quality",
                     "image_quality",
                     "Choose your preferred image quality",
+                    240,
                     120,
                     1920,
                     120
@@ -149,36 +152,35 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
 
     override suspend fun getHomeTabs() = listOf<Tab>()
 
-    override fun getHomeFeed(tab: Tab?): PagedData<Shelf> = PagedData.Continuous {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun getHomeFeed(tab: Tab?): PagedData<Shelf> = PagedData.Single {
         handleArlExpiration()
         val homeSections  = api.homePage()["results"]?.jsonObject?.get("sections")?.jsonArray ?: JsonArray(emptyList())
-
-        val dataList = coroutineScope {
-            homeSections .map { section ->
+        withContext(Dispatchers.IO.limitedParallelism(4)) {
+            homeSections.map { section ->
+                val id = section.jsonObject["module_id"]!!.jsonPrimitive.content
                 async {
-                    val id = section.jsonObject["module_id"]!!.jsonPrimitive.content
-                    if (isSupportedSection(id)) {
-                        section.toShelfItemsList(section.jsonObject["title"]!!.jsonPrimitive.content)
-                    } else null
+                    when (id) {
+                        "b21892d3-7e9c-4b06-aff6-2c3be3266f68", "348128f5-bed6-4ccb-9a37-8e5f5ed08a62",
+                        "8d10a320-f130-4dcb-a610-38baf0c57896", "2a7e897f-9bcf-4563-8e11-b93a601766e1",
+                        "7a65f4ed-71e1-4b6e-97ba-4de792e4af62", "25f9200f-1ce0-45eb-abdc-02aecf7604b2",
+                        "c320c7ad-95f5-4021-8de1-cef16b053b6d", "b2e8249f-8541-479e-ab90-cf4cf5896cbc",
+                        "927121fd-ef7b-428e-8214-ae859435e51c" -> {
+                            section.toShelfItemsList(section.jsonObject["title"]!!.jsonPrimitive.content)
+                        }
+
+                        "868606eb-4afc-4e1a-b4e4-75b30da34ac8" -> {
+                            section.toShelfCategoryList(section.jsonObject["title"]!!.jsonPrimitive.content) { target ->
+                                channelFeed(target)
+                            }
+                        }
+
+                        else -> null
+                    }
                 }
             }.awaitAll().filterNotNull()
         }
-
-        Page(dataList, it)
     }
-
-
-    private fun isSupportedSection(id: String) = listOf(
-        "b21892d3-7e9c-4b06-aff6-2c3be3266f68",
-        "348128f5-bed6-4ccb-9a37-8e5f5ed08a62",
-        "8d10a320-f130-4dcb-a610-38baf0c57896",
-        "2a7e897f-9bcf-4563-8e11-b93a601766e1",
-        "7a65f4ed-71e1-4b6e-97ba-4de792e4af62",
-        "25f9200f-1ce0-45eb-abdc-02aecf7604b2",
-        "c320c7ad-95f5-4021-8de1-cef16b053b6d",
-        "b2e8249f-8541-479e-ab90-cf4cf5896cbc",
-        "927121fd-ef7b-428e-8214-ae859435e51c"
-    ).contains(id)
 
     //<============= Library =============>
 
@@ -284,14 +286,12 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
         api.updatePlaylist(playlist.id, title, description)
     }
 
-    override suspend fun likeTrack(track: Track, liked: Boolean): Boolean {
+    override suspend fun likeTrack(track: Track, isLiked: Boolean) {
         handleArlExpiration()
-        if(liked) {
+        if(isLiked) {
             api.addFavoriteTrack(track.id)
-            return true
         } else {
             api.removeFavoriteTrack(track.id)
-            return false
         }
     }
 
@@ -374,7 +374,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
             }
 
             is EchoMediaItem.Lists.PlaylistItem -> {
-                api.addFavoriteAlbum(mediaItem.playlist.id)
+                api.addFavoritePlaylist(mediaItem.playlist.id)
             }
 
             else -> {}
@@ -451,36 +451,51 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
         } ?: emptyList()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun browseFeed(): List<Shelf> {
-        val dataList = mutableListOf<Shelf>()
+        handleArlExpiration()
         api.updateCountry()
         val jsonObject = api.browsePage()
         val resultObject = jsonObject["results"]!!.jsonObject
         val sections = resultObject["sections"]!!.jsonArray
         val jsonData = json.decodeFromString<JsonArray>(sections.toString())
-        jsonData.map { section ->
-            val id = section.jsonObject["module_id"]!!.jsonPrimitive.content
-            // Just for the time being until everything is implemented
-            when(id) {
-                "67aa1c1b-7873-488d-88a0-55b6596cf4d6", "486313b7-e3c7-453d-ba79-27dc6bea20ce",
-                "1d8dfed4-582f-40e1-b29c-760b44c0301e" -> {
-                    val name = section.jsonObject["title"]!!.jsonPrimitive.content
-                    val data = section.toShelfItemsList(name = name)
-                    dataList.add(data)
-                }
-                "8b2c6465-874d-4752-a978-1637ca0227b5" -> {
-                    val name = section.jsonObject["title"]!!.jsonPrimitive.content
-                    val categories = section.toShelfCategoryList(name = name)
-                    val data = categories.list.map {
-                        val target = it.extras["target"]
-                    }
-                    dataList.add(data)
-                }
+        return withContext(Dispatchers.IO.limitedParallelism(4)) {
+            jsonData.mapNotNull { section ->
+                val id = section.jsonObject["module_id"]!!.jsonPrimitive.content
+                async {
+                    when (id) {
+                        "67aa1c1b-7873-488d-88a0-55b6596cf4d6", "486313b7-e3c7-453d-ba79-27dc6bea20ce",
+                        "1d8dfed4-582f-40e1-b29c-760b44c0301e", "ecb89e7c-1c07-4922-aa50-d29745576636",
+                        "64ac680b-7c84-49a3-9077-38e9b653332e" -> {
+                            section.toShelfItemsList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty())
+                        }
 
-                else -> null
-            }
+                        "8b2c6465-874d-4752-a978-1637ca0227b5" -> {
+                            section.toShelfCategoryList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty()) { target ->
+                                channelFeed(target)
+                            }
+                        }
+
+                        else -> null
+                    }
+                }
+            }.awaitAll().filterNotNull()
         }
-        return dataList
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun channelFeed(target: String): List<Shelf> {
+        val jsonObject = api.channelPage(target)
+        val resultObject = jsonObject["results"]!!.jsonObject
+        val sections = resultObject["sections"]!!.jsonArray
+        val jsonData = json.decodeFromString<JsonArray>(sections.toString())
+        return withContext(Dispatchers.IO.limitedParallelism(4)) {
+            jsonData.map { section ->
+                async {
+                    section.toShelfItemsList(section.jsonObject["title"]!!.jsonPrimitive.content)
+                }
+            }.awaitAll()
+        }
     }
 
     override suspend fun searchTabs(query: String?): List<Tab> {
@@ -520,8 +535,18 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
         return if (streamable.quality == 1) {
            streamable.id.toAudio().toMedia()
         } else {
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             getByteStreamAudio(scope, streamable, client)
+        }
+    }
+
+    private suspend fun isTrackLiked(id: String): Boolean {
+        val dataArray = api.getTracks()["results"]?.jsonObject
+            ?.get("data")?.jsonArray ?: return false
+
+        return dataArray.any { item ->
+            val artistId = item.jsonObject["SNG_ID"]?.jsonPrimitive?.content
+            artistId == id
         }
     }
 
@@ -605,6 +630,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, RadioClien
             title = track.title,
             cover = newTrack.cover,
             artists = track.artists,
+            isLiked = isTrackLiked(track.id),
             streamables = listOf(
                 Streamable.audio(
                     id = url,
