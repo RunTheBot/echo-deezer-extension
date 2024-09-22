@@ -88,17 +88,17 @@ suspend fun getByteStreamAudio(
         .header("Connection", "keep-alive")
         .build()
 
-    val clientWithTimeouts = client.newBuilder()
-        .readTimeout(0, TimeUnit.SECONDS)
-        .connectTimeout(0, TimeUnit.SECONDS)
-        .writeTimeout(0, TimeUnit.SECONDS)
-        .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
-        .protocols(listOf(Protocol.HTTP_1_1))
-        .build()
-
     val byteChannel = ByteChannel(true)
 
     scope.launch(Dispatchers.IO) {
+        val clientWithTimeouts = client.newBuilder()
+            .readTimeout(0, TimeUnit.SECONDS)
+            .connectTimeout(0, TimeUnit.SECONDS)
+            .writeTimeout(0, TimeUnit.SECONDS)
+            .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+            .protocols(listOf(Protocol.HTTP_1_1))
+            .build()
+
         val response = clientWithTimeouts.newCall(request).execute()
         val byteStream = response.body.byteStream()
 

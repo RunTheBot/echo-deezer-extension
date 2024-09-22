@@ -21,26 +21,37 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 import java.util.Date
 
-fun JsonElement.toShelfItemsList(name: String = "Unknown"): Shelf {
-    val itemsArray = jsonObject["items"]?.jsonArray ?: return Shelf.Lists.Items(name, emptyList())
+fun JsonElement.toShelfItemsList(name: String = "Unknown"): Shelf? {
+    val itemsArray = jsonObject["items"]?.jsonArray ?: return null
+    val list = itemsArray.mapNotNull { it.jsonObject.toEchoMediaItem() }
+    return if (list.isNotEmpty()) {
+        Shelf.Lists.Items(
+            title = name,
+            list = list
+        )
+    } else {
+        null
+    }
+}
+
+fun JsonObject.toShelfItemsList(name: String = "Unknown"): Shelf? {
+    val item = toEchoMediaItem() ?: return null
     return Shelf.Lists.Items(
         title = name,
-        list = itemsArray.mapNotNull { it.jsonObject.toEchoMediaItem() }
+        list = listOf(item)
     )
 }
 
-fun JsonObject.toShelfItemsList(name: String = "Unknown"): Shelf {
-    return Shelf.Lists.Items(
-        title = name,
-        list = listOfNotNull(toEchoMediaItem())
-    )
-}
-
-fun JsonArray.toShelfItemsList(name: String = "Unknown"): Shelf {
-    return Shelf.Lists.Items(
-        title = name,
-        list = mapNotNull { it.jsonObject.toEchoMediaItem() }
-    )
+fun JsonArray.toShelfItemsList(name: String = "Unknown"): Shelf? {
+    val list = mapNotNull { it.jsonObject.toEchoMediaItem() }
+    return if (list.isNotEmpty()) {
+        Shelf.Lists.Items(
+            title = name,
+            list = list
+        )
+    } else {
+        null
+    }
 }
 
 fun JsonElement.toShelfCategoryList(name: String = "Unknown", block: suspend (String) -> List<Shelf>): Shelf.Lists.Categories {
