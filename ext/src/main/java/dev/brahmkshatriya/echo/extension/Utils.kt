@@ -7,6 +7,7 @@ import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
@@ -83,11 +84,6 @@ suspend fun getByteStreamAudio(
     val contentLength = Utils.getContentLength(url, client)
     val key = streamable.extra["key"] ?: ""
 
-    val request = Request.Builder()
-        .url(url)
-        .header("Connection", "keep-alive")
-        .build()
-
     val byteChannel = ByteChannel(true)
 
     scope.launch(Dispatchers.IO) {
@@ -99,27 +95,53 @@ suspend fun getByteStreamAudio(
             .protocols(listOf(Protocol.HTTP_1_1))
             .build()
 
-        val response = clientWithTimeouts.newCall(request).execute()
-        val byteStream = response.body.byteStream()
+        var totalBytesRead = 0L
+        var counter = 0
+        var retryCount = 0
+        val maxRetries = 3
 
-        try {
+        while (totalBytesRead < contentLength && retryCount < maxRetries) {
+            val requestBuilder = Request.Builder()
+                .url(url)
+                .header("Connection", "keep-alive")
+
+            if (totalBytesRead > 0) {
+                requestBuilder.header("Range", "bytes=$totalBytesRead-")
+            }
+
+            val request = requestBuilder.build()
+
+            val response = clientWithTimeouts.newCall(request).execute()
+
+            val byteStream = response.body.byteStream()
+
             try {
-                var totalBytesRead = 0L
-                var counter = 0
+                var shouldReopen = false
 
                 while (totalBytesRead < contentLength) {
                     val buffer = ByteArray(2048)
                     var bytesRead: Int
                     var totalRead = 0
 
-                    while (totalRead < buffer.size) {
-                        bytesRead =
-                            byteStream.read(buffer, totalRead, buffer.size - totalRead)
-                        if (bytesRead == -1) break
-                        totalRead += bytesRead
+                    try {
+                        while (totalRead < buffer.size) {
+                            bytesRead = byteStream.read(buffer, totalRead, buffer.size - totalRead)
+                            if (bytesRead == -1) {
+                                shouldReopen = true
+                                break
+                            }
+                            totalRead += bytesRead
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        shouldReopen = true
+                        break
                     }
 
-                    if (totalRead == 0) break
+                    if (totalRead == 0) {
+                        shouldReopen = true
+                        break
+                    }
 
                     try {
                         if (totalRead != 2048) {
@@ -134,16 +156,27 @@ suspend fun getByteStreamAudio(
                         }
                     } catch (e: IOException) {
                         println("Channel closed while writing, aborting.")
+                        shouldReopen = false
+                        break
                     }
                     totalBytesRead += totalRead
                     counter++
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                throw IOException("Error while reading/writing stream: ${e.message}", e)
+
+                if (shouldReopen) {
+                    retryCount++
+                    println("Stream interrupted, retrying... (attempt $retryCount)")
+                } else {
+                    break
+                }
+            } finally {
+                byteStream.close()
+                response.close()
             }
-        } catch (e: IOException) {
-            println("Exception during decryption or streaming: ${e.message}")
+        }
+
+        if (retryCount >= maxRetries) {
+            throw IOException("Maximum retry attempts reached, aborting.")
         }
     }
 
