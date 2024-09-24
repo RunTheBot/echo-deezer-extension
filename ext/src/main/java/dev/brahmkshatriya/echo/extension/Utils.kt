@@ -97,13 +97,9 @@ suspend fun getByteStreamAudio(
 
         var totalBytesRead = 0L
         var counter = 0
-        var retryCount = 0
-        val maxRetries = 3
 
-        while (totalBytesRead < contentLength && retryCount < maxRetries) {
-            val requestBuilder = Request.Builder()
-                .url(url)
-                .header("Connection", "keep-alive")
+        while (totalBytesRead < contentLength) {
+            val requestBuilder = Request.Builder().url(url)
 
             if (totalBytesRead > 0) {
                 requestBuilder.header("Range", "bytes=$totalBytesRead-")
@@ -113,9 +109,7 @@ suspend fun getByteStreamAudio(
 
             val response = clientWithTimeouts.newCall(request).execute()
 
-            val byteStream = response.body.byteStream()
-
-            try {
+            response.body.byteStream().use { byteStream ->
                 var shouldReopen = false
 
                 while (totalBytesRead < contentLength) {
@@ -163,20 +157,12 @@ suspend fun getByteStreamAudio(
                     counter++
                 }
 
-                if (shouldReopen) {
-                    retryCount++
-                    println("Stream interrupted, retrying... (attempt $retryCount)")
+                if (shouldReopen && totalBytesRead != contentLength) {
+                    println("$totalBytesRead-$contentLength")
                 } else {
-                    break
+                    response.close()
                 }
-            } finally {
-                byteStream.close()
-                response.close()
             }
-        }
-
-        if (retryCount >= maxRetries) {
-            throw IOException("Maximum retry attempts reached, aborting.")
         }
     }
 
