@@ -7,8 +7,8 @@ import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -51,6 +51,15 @@ object Utils {
         }
     }
 
+    private fun bytesToHex(bytes: ByteArray): String {
+        return bytes.joinToString("") { String.format("%02X", it) }
+    }
+
+    fun String.toMD5(): String {
+        val bytes = MessageDigest.getInstance("MD5").digest(this.toByteArray(Charsets.ISO_8859_1))
+        return bytesToHex(bytes).lowercase()
+    }
+
     fun decryptBlowfish(chunk: ByteArray, blowfishKey: String): ByteArray {
         val cipher = cipherCache.computeIfAbsent(blowfishKey) { createCipher(it) }
         return cipher.doFinal(chunk)
@@ -66,22 +75,13 @@ object Utils {
     }
 }
 
-private fun bytesToHex(bytes: ByteArray): String {
-    return bytes.joinToString("") { String.format("%02X", it) }
-}
-
-fun String.toMD5(): String {
-    val bytes = MessageDigest.getInstance("MD5").digest(this.toByteArray(Charsets.ISO_8859_1))
-    return bytesToHex(bytes).lowercase()
-}
-
-suspend fun getByteStreamAudio(
+suspend fun getByteChannel(
     scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     streamable: Streamable,
-    client: OkHttpClient
-): Streamable.Media {
+    client: OkHttpClient,
+    contentLength: Long
+): ByteChannel = withContext(Dispatchers.IO) {
     val url = streamable.id
-    val contentLength = Utils.getContentLength(url, client)
     val key = streamable.extra["key"] ?: ""
 
     val byteChannel = ByteChannel(true)
@@ -151,23 +151,31 @@ suspend fun getByteStreamAudio(
                     } catch (e: IOException) {
                         println("Channel closed while writing, aborting.")
                         shouldReopen = false
+                        totalBytesRead = contentLength
                         break
                     }
                     totalBytesRead += totalRead
                     counter++
                 }
 
-                if (shouldReopen && totalBytesRead != contentLength) {
-                    println("$totalBytesRead-$contentLength")
-                } else {
+                if (!shouldReopen) {
                     response.close()
                 }
             }
         }
     }
 
+    byteChannel
+}
+
+suspend fun getByteStreamAudio(
+    scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    streamable: Streamable,
+    client: OkHttpClient
+): Streamable.Media {
+    val contentLength = Utils.getContentLength(streamable.id, client)
     return Streamable.Audio.Channel(
-        channel = byteChannel,
+        channel = getByteChannel(scope, streamable, client, contentLength),
         totalBytes = contentLength
     ).toMedia()
 }

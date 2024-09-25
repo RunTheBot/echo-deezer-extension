@@ -59,7 +59,7 @@ fun JsonElement.toShelfCategoryList(name: String = "Unknown", block: suspend (St
     return Shelf.Lists.Categories(
         title = name,
         list = itemsArray.take(5).mapNotNull { it.jsonObject.toShelfCategory(block) },
-        type = Shelf.Lists.Type.Grid,
+        type = Shelf.Lists.Type.Linear,
         more = PagedData.Single {
             itemsArray.mapNotNull { it.jsonObject.toShelfCategory(block) }
         }
