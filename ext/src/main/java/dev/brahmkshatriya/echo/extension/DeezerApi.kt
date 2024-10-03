@@ -630,44 +630,44 @@ class DeezerApi {
         callApi(
             method = "playlist.deleteFavorite",
             params = buildJsonObject {
-                put("PARENT_PLAYLIST_ID", id)
+                put("PLAYLIST_ID", id)
             }
         )
     }
 
     suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) = coroutineScope {
-        tracks.map { track ->
-            async(Dispatchers.IO) {
-                callApi(
-                    method = "playlist.addSongs",
-                    params = buildJsonObject {
-                        put("playlist_id", playlist.id)
-                        put("songs", buildJsonArray {
+        async(Dispatchers.IO) {
+            callApi(
+                method = "playlist.addSongs",
+                params = buildJsonObject {
+                    put("playlist_id", playlist.id)
+                    put("songs", buildJsonArray {
+                        tracks.map { track ->
                             add(buildJsonArray { add(track.id); add(0) })
-                        })
-                    }
-                )
-            }
-        }.awaitAll()
+                        }
+                    })
+                }
+            )
+        }.await()
     }
 
     suspend fun removeFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) = coroutineScope {
-        val trackIds = tracks.map { it.id }
-        val ids = indexes.map { index -> trackIds[index] }
-        ids.map { id ->
+            val trackIds = tracks.map { it.id }
+            val ids = indexes.map { index -> trackIds[index] }
             async(Dispatchers.IO) {
                 callApi(
                     method = "playlist.deleteSongs",
                     params = buildJsonObject {
                         put("playlist_id", playlist.id)
                         put("songs", buildJsonArray {
-                            add(buildJsonArray { add(id); add(0) })
+                            ids.map { id ->
+                                add(buildJsonArray { add(id); add(0) })
+                            }
                         })
                     }
                 )
-            }
-        }.awaitAll()
-    }
+            }.await()
+        }
 
     suspend fun createPlaylist(title: String, description: String? = ""): JsonObject {
         val jsonData = callApi(
@@ -852,6 +852,16 @@ class DeezerApi {
             params = buildJsonObject {
                 put("sng_id", id)
                 put("start_with_input_track", false)
+            }
+        )
+        return json.decodeFromString<JsonObject>(jsonData)
+    }
+
+    suspend fun mixArtist(id: String): JsonObject {
+        val jsonData = callApi(
+            method = "smart.getSmartRadio",
+            params = buildJsonObject {
+                put("art_id", id)
             }
         )
         return json.decodeFromString<JsonObject>(jsonData)

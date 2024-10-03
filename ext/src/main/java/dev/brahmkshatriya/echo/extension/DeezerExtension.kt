@@ -168,6 +168,15 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
         api.addToPlaylist(playlist, new)
     }
 
+    override suspend fun removeTracksFromPlaylist(
+        playlist: Playlist,
+        tracks: List<Track>,
+        indexes: List<Int>
+    ) {
+        handleArlExpiration()
+        api.removeFromPlaylist(playlist, tracks, indexes)
+    }
+
     override suspend fun createPlaylist(title: String, description: String?): Playlist {
         handleArlExpiration()
         val jsonObject = api.createPlaylist(title, description)
@@ -232,15 +241,6 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
         val idArray = tracks.map { it.id }.toMutableList()
         idArray.add(toIndex, idArray.removeAt(fromIndex))
         api.updatePlaylistOrder(playlist.id, idArray)
-    }
-
-    override suspend fun removeTracksFromPlaylist(
-        playlist: Playlist,
-        tracks: List<Track>,
-        indexes: List<Int>
-    ) {
-        handleArlExpiration()
-        api.removeFromPlaylist(playlist, tracks, indexes)
     }
 
     override suspend fun isSavedToLibrary(mediaItem: EchoMediaItem): Boolean {
@@ -350,9 +350,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     override suspend fun radio(playlist: Playlist): Radio = deezerRadioClient.radio(playlist)
 
-    override suspend fun radio(artist: Artist): Radio {
-        TODO("Not Planned")
-    }
+    override suspend fun radio(artist: Artist): Radio = deezerRadioClient.radio(artist)
 
     override suspend fun radio(user: User): Radio {
         TODO("Not Planned")

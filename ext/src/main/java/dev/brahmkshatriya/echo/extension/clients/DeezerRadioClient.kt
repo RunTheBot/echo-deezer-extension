@@ -2,6 +2,7 @@ package dev.brahmkshatriya.echo.extension.clients
 
 import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
+import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Radio
@@ -14,9 +15,15 @@ import kotlinx.serialization.json.jsonObject
 class DeezerRadioClient(private val api: DeezerApi) {
 
     fun loadTracks(radio: Radio): PagedData<Track> = PagedData.Single {
+        println("FUCK YOU $radio")
         val dataArray = when (radio.extras["radio"]) {
-            "track" -> {
+            "track"-> {
                 val jsonObject = api.mix(radio.id)
+                jsonObject["results"]!!.jsonObject["data"]!!.jsonArray
+            }
+
+            "artist" -> {
+                val jsonObject = api.mixArtist(radio.id)
                 jsonObject["results"]!!.jsonObject["data"]!!.jsonArray
             }
 
@@ -48,6 +55,7 @@ class DeezerRadioClient(private val api: DeezerApi) {
                         "NEXT" to (nextTrackId ?: ""),
                         when (radio.extras["radio"]) {
                             "track" -> "artist_id" to track.artists[0].id
+                            "artist" -> "artist_id" to radio.id
                             "playlist", "album" -> "artist_id" to (radio.extras["artist"] ?: "")
                             else -> "user_id" to "0"
                         }
@@ -83,6 +91,17 @@ class DeezerRadioClient(private val api: DeezerApi) {
                         )
                     }
 
+                    "artist" -> {
+                        Radio(
+                            id = context.radio.id,
+                            title = context.radio.title,
+                            cover = context.radio.cover,
+                            extras = mapOf(
+                                "radio" to "artist"
+                            )
+                        )
+                    }
+
                     "playlist", "album" -> {
                         Radio(
                             id = track.id,
@@ -99,6 +118,17 @@ class DeezerRadioClient(private val api: DeezerApi) {
                         context.radio
                     }
                 }
+            }
+
+            is EchoMediaItem.Profile.ArtistItem -> {
+                Radio(
+                    id = context.artist.id,
+                    title =  context.artist.name,
+                    cover = context.artist.cover,
+                    extras = mapOf(
+                        "radio" to "artist"
+                    )
+                )
             }
 
             is EchoMediaItem.Lists.PlaylistItem -> {
@@ -157,6 +187,17 @@ class DeezerRadioClient(private val api: DeezerApi) {
             extras = mapOf(
                 "radio" to "playlist",
                 "artist" to lastTrack.artists[0].id
+            )
+        )
+    }
+
+    fun radio(artist: Artist): Radio {
+        return Radio(
+            id = artist.id,
+            title = artist.name,
+            cover = artist.cover,
+            extras = mapOf(
+                "radio" to "artist"
             )
         )
     }

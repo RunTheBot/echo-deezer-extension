@@ -7,6 +7,7 @@ import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
@@ -55,7 +56,7 @@ object Utils {
         return bytes.joinToString("") { String.format("%02X", it) }
     }
 
-    fun String.toMD5(): String {
+    private fun String.toMD5(): String {
         val bytes = MessageDigest.getInstance("MD5").digest(this.toByteArray(Charsets.ISO_8859_1))
         return bytesToHex(bytes).lowercase()
     }
@@ -93,12 +94,13 @@ suspend fun getByteChannel(
             .writeTimeout(0, TimeUnit.SECONDS)
             .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
             .protocols(listOf(Protocol.HTTP_1_1))
+            .retryOnConnectionFailure(true)
             .build()
 
         var totalBytesRead = 0L
         var counter = 0
 
-        while (totalBytesRead < contentLength) {
+        while (totalBytesRead < contentLength && !byteChannel.isClosedForWrite) {
             val requestBuilder = Request.Builder().url(url)
 
             if (totalBytesRead > 0) {
@@ -149,9 +151,9 @@ suspend fun getByteChannel(
                             }
                         }
                     } catch (e: IOException) {
-                        println("Channel closed while writing, aborting.")
-                        shouldReopen = false
-                        totalBytesRead = contentLength
+                        e.printStackTrace()
+                        println("Exception occurred while writing to channel: ${e.message}")
+                        shouldReopen = true
                         break
                     }
                     totalBytesRead += totalRead
