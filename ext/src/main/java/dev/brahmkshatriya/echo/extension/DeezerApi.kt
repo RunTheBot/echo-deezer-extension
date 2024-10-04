@@ -636,38 +636,39 @@ class DeezerApi {
     }
 
     suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) = coroutineScope {
-        async(Dispatchers.IO) {
-            callApi(
-                method = "playlist.addSongs",
-                params = buildJsonObject {
-                    put("playlist_id", playlist.id)
-                    put("songs", buildJsonArray {
-                        tracks.map { track ->
+        callApi(
+            method = "playlist.addSongs",
+            params = buildJsonObject {
+                put("playlist_id", playlist.id)
+                put("songs", buildJsonArray {
+                    tracks.map { track ->
+                        async(Dispatchers.IO) {
                             add(buildJsonArray { add(track.id); add(0) })
                         }
-                    })
-                }
-            )
-        }.await()
+                    }.awaitAll()
+                })
+            }
+        )
     }
 
     suspend fun removeFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) = coroutineScope {
-            val trackIds = tracks.map { it.id }
-            val ids = indexes.map { index -> trackIds[index] }
-            async(Dispatchers.IO) {
-                callApi(
-                    method = "playlist.deleteSongs",
-                    params = buildJsonObject {
-                        put("playlist_id", playlist.id)
-                        put("songs", buildJsonArray {
-                            ids.map { id ->
-                                add(buildJsonArray { add(id); add(0) })
-                            }
-                        })
-                    }
-                )
-            }.await()
-        }
+        val trackIds = tracks.map { it.id }
+        val ids = indexes.map { index -> trackIds[index] }
+
+        callApi(
+            method = "playlist.deleteSongs",
+            params = buildJsonObject {
+                put("playlist_id", playlist.id)
+                put("songs", buildJsonArray {
+                    ids.map { id ->
+                        async(Dispatchers.IO) {
+                            add(buildJsonArray { add(id); add(0) })
+                        }
+                    }.awaitAll()
+                })
+            }
+        )
+    }
 
     suspend fun createPlaylist(title: String, description: String? = ""): JsonObject {
         val jsonData = callApi(
