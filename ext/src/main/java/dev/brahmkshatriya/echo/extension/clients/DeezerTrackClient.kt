@@ -8,7 +8,7 @@ import dev.brahmkshatriya.echo.extension.DeezerApi
 import dev.brahmkshatriya.echo.extension.Utils
 import dev.brahmkshatriya.echo.extension.generateTrackUrl
 import dev.brahmkshatriya.echo.extension.getByteStreamAudio
-import dev.brahmkshatriya.echo.extension.toNewTrack
+import dev.brahmkshatriya.echo.extension.toTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,26 +36,26 @@ class DeezerTrackClient(private val api: DeezerApi) {
     }
 
     suspend fun loadTrack(track: Track, quality: String, log: Boolean): Track = coroutineScope {
-        val newTrack = track.toNewTrack()
-
-        if (track.extras["__TYPE__"] == "show") {
-            return@coroutineScope newTrack
-        }
-
-        val jsonObjectDeferred = async {
-            if (track.extras["FILESIZE_MP3_MISC"] != "0" && track.extras["FILESIZE_MP3_MISC"] != null) {
-                api.getMP3MediaUrl(track)
-            } else {
-                api.getMediaUrl(track, quality)
-            }
-        }
-
-        val key = Utils.createBlowfishKey(track.id)
-
         suspend fun fetchTrackData(track: Track): JsonObject {
             val trackObject = api.track(arrayOf(track))
             return trackObject["results"]!!.jsonObject["data"]!!.jsonArray[0].jsonObject
         }
+
+        val newTrack = fetchTrackData(track).toTrack(loaded = true)
+
+        if (newTrack.extras["__TYPE__"] == "show") {
+            return@coroutineScope newTrack
+        }
+
+        val jsonObjectDeferred = async {
+            if (newTrack.extras["FILESIZE_MP3_MISC"] != "0" && newTrack.extras["FILESIZE_MP3_MISC"] != null) {
+                api.getMP3MediaUrl(newTrack)
+            } else {
+                api.getMediaUrl(newTrack, quality)
+            }
+        }
+
+        val key = Utils.createBlowfishKey(newTrack.id)
 
         suspend fun generateUrl(trackId: String, md5Origin: String, mediaVersion: String): String =
             withContext(Dispatchers.IO) {
@@ -79,14 +79,14 @@ class DeezerTrackClient(private val api: DeezerApi) {
                 val dataObject = fetchTrackData(track)
                 val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
                 val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-                generateUrl(track.id, md5Origin, mediaVersion)
+                generateUrl(newTrack.id, md5Origin, mediaVersion)
             }
 
-            track.extras["FILESIZE_MP3_MISC"] != "0" && track.extras["FILESIZE_MP3_MISC"] != null && jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
+            newTrack.extras["FILESIZE_MP3_MISC"] != "0" && newTrack.extras["FILESIZE_MP3_MISC"] != null && jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
                 val dataObject = fetchTrackData(track)
                 val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
                 val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-                generateUrl(track.id, md5Origin, mediaVersion)
+                generateUrl(newTrack.id, md5Origin, mediaVersion)
             }
 
             jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
@@ -97,7 +97,7 @@ class DeezerTrackClient(private val api: DeezerApi) {
                 val newDataObject = fetchTrackData(fallbackTrack)
                 val md5Origin = newDataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
                 val mediaVersion = newDataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-                generateUrl(track.id, md5Origin, mediaVersion)
+                generateUrl(newTrack.id, md5Origin, mediaVersion)
             }
 
             else -> {
@@ -109,20 +109,20 @@ class DeezerTrackClient(private val api: DeezerApi) {
         }
 
         if (log) {
-            api.log(track)
+            api.log(newTrack)
         }
 
         Track(
-            id = track.id,
-            title = track.title,
+            id = newTrack.id,
+            title = newTrack.title,
             cover = newTrack.cover,
-            artists = track.artists,
-            isLiked = isTrackLiked(track.id),
+            artists = newTrack.artists,
+            isLiked = isTrackLiked(newTrack.id),
             streamables = listOf(
                 Streamable.audio(
                     id = url,
                     quality = 0,
-                    title = track.title,
+                    title = newTrack.title,
                     extra = mapOf("key" to key)
                 )
             )

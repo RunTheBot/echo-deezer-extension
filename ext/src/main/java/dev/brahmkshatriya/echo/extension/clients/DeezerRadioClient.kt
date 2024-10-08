@@ -15,7 +15,6 @@ import kotlinx.serialization.json.jsonObject
 class DeezerRadioClient(private val api: DeezerApi) {
 
     fun loadTracks(radio: Radio): PagedData<Track> = PagedData.Single {
-        println("FUCK YOU $radio")
         val dataArray = when (radio.extras["radio"]) {
             "track"-> {
                 val jsonObject = api.mix(radio.id)

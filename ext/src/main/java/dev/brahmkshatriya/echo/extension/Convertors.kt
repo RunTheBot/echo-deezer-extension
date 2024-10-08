@@ -180,7 +180,7 @@ fun JsonObject.toArtist(isFollowing: Boolean = false, loaded: Boolean = false): 
 }
 
 @Suppress("NewApi")
-fun JsonObject.toTrack(): Track {
+fun JsonObject.toTrack(loaded: Boolean = false): Track {
     val data = this["data"]?.jsonObject ?: this
     val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content.orEmpty()
     val artistObject = data["ARTISTS"]?.jsonArray?.firstOrNull()?.jsonObject ?: data
@@ -188,7 +188,7 @@ fun JsonObject.toTrack(): Track {
     return Track(
         id = data["SNG_ID"]?.jsonPrimitive?.content.orEmpty(),
         title = data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty(),
-        cover = getCover(md5, "cover", false),
+        cover = getCover(md5, "cover", loaded),
         duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
         releaseDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toLongOrNull()?.let {
             Date.from(Instant.ofEpochSecond(it)).toString()
@@ -207,19 +207,6 @@ fun JsonObject.toTrack(): Track {
             "MD5" to md5,
             "TYPE" to "cover"
         )
-    )
-}
-
-fun Track.toNewTrack(): Track {
-    return Track(
-        id = this.id,
-        title = this.title,
-        cover = getCover(this.extras["MD5"], this.extras["TYPE"], true),
-        duration = this.duration,
-        releaseDate = this.releaseDate,
-        artists = this.artists,
-        extras = this.extras,
-        streamables = this.streamables
     )
 }
 
