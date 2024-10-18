@@ -6,8 +6,6 @@ import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -36,6 +34,10 @@ import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
 import java.util.zip.GZIPInputStream
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 class DeezerApi {
     init {
@@ -100,6 +102,8 @@ class DeezerApi {
                 }
             }
             if (useProxy && DeezerUtils.settings?.getBoolean("proxy") == true) {
+                sslSocketFactory(createTrustAllSslSocketFactory(), createTrustAllTrustManager())
+                hostnameVerifier { _, _ -> true }
                 proxy(
                     Proxy(
                         Proxy.Type.HTTP,
@@ -108,6 +112,22 @@ class DeezerApi {
                 )
             }
         }.build()
+    }
+
+    private fun createTrustAllSslSocketFactory(): SSLSocketFactory {
+        val trustAllCerts = arrayOf<TrustManager>(createTrustAllTrustManager())
+        val sslContext = SSLContext.getInstance("SSL")
+        sslContext.init(null, trustAllCerts, java.security.SecureRandom())
+        return sslContext.socketFactory
+    }
+
+    @Suppress("TrustAllX509TrustManager", "CustomX509TrustManager")
+    private fun createTrustAllTrustManager(): X509TrustManager {
+        return object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {}
+            override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {}
+            override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+        }
     }
 
     private val client: OkHttpClient get() = createOkHttpClient(useProxy = true)

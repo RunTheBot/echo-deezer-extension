@@ -12,9 +12,6 @@ import dev.brahmkshatriya.echo.extension.toTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -35,16 +32,16 @@ class DeezerTrackClient(private val api: DeezerApi) {
         }
     }
 
-    suspend fun loadTrack(track: Track, quality: String, log: Boolean): Track = coroutineScope {
+    suspend fun loadTrack(track: Track, quality: String, log: Boolean): Track {
         suspend fun fetchTrackData(track: Track): JsonObject {
             val trackObject = api.track(arrayOf(track))
             return trackObject["results"]!!.jsonObject["data"]!!.jsonArray[0].jsonObject
         }
 
-        val newTrack = fetchTrackData(track).toTrack(loaded = true)
+        val newTrack = fetchTrackData(track).toTrack(loaded = true).copy(extras = track.extras)
 
         if (newTrack.extras["__TYPE__"] == "show") {
-            return@coroutineScope newTrack
+            return newTrack
         }
 
         val jsonObject =
@@ -109,11 +106,7 @@ class DeezerTrackClient(private val api: DeezerApi) {
             api.log(newTrack)
         }
 
-        Track(
-            id = newTrack.id,
-            title = newTrack.title,
-            cover = newTrack.cover,
-            artists = newTrack.artists,
+        return newTrack.copy(
             isLiked = isTrackLiked(newTrack.id),
             streamables = listOf(
                 Streamable.audio(

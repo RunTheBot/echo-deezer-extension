@@ -9,7 +9,6 @@ import dev.brahmkshatriya.echo.extension.DeezerExtension
 import dev.brahmkshatriya.echo.extension.toEchoMediaItem
 import dev.brahmkshatriya.echo.extension.toShelfCategoryList
 import dev.brahmkshatriya.echo.extension.toShelfItemsList
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope

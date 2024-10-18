@@ -7,7 +7,6 @@ import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
@@ -87,11 +86,11 @@ suspend fun getByteChannel(
 
     val byteChannel = ByteChannel(true)
 
-    scope.launch(Dispatchers.IO) {
+    scope.launch {
         val clientWithTimeouts = client.newBuilder()
-            .readTimeout(0, TimeUnit.SECONDS)
-            .connectTimeout(0, TimeUnit.SECONDS)
-            .writeTimeout(0, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
             .protocols(listOf(Protocol.HTTP_1_1))
             .retryOnConnectionFailure(true)

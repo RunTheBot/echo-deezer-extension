@@ -10,7 +10,7 @@ import java.net.URL
 
 class Opener : Activity() {
 
-    private val extensionId = "deezer"
+    private val extensionId = "deezerApp"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
