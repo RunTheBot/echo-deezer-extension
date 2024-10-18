@@ -226,7 +226,7 @@ class DeezerApi {
         return userList
     }
 
-    suspend fun getArlByEmail(mail: String, password: String) = withContext(Dispatchers.IO) {
+    suspend fun getArlByEmail(mail: String, password: String) {
         // Get SID
         getSid()
 
@@ -296,7 +296,7 @@ class DeezerApi {
         }
     }
 
-    suspend fun getMP3MediaUrl(track: Track): JsonObject = withContext(Dispatchers.IO) {
+    fun getMP3MediaUrl(track: Track): JsonObject {
         val headers = Headers.Builder().apply {
             add("Accept-Encoding", "gzip")
             add("Accept-Language", language.substringBefore("-"))
@@ -342,26 +342,20 @@ class DeezerApi {
         val response = clientNP.newCall(request).execute()
         val responseBody = response.body.string()
 
-       json.decodeFromString<JsonObject>(responseBody)
+       return json.decodeFromString<JsonObject>(responseBody)
     }
 
-    suspend fun getMediaUrl(track: Track, quality: String): JsonObject = withContext(Dispatchers.IO) {
+    fun getMediaUrl(track: Track, quality: String): JsonObject {
         val url = HttpUrl.Builder()
             .scheme("https")
             .host("dzmedia.fly.dev")
             .addPathSegment("get_url")
             .build()
 
-        val formats = if (quality == "128") {
-
-
-            arrayOf("MP3_128", "MP3_64", "MP3_MISC")
-        } else {
-            if (quality == "flac") {
-                arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
-            } else {
-                arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
-            }
+        val formats = when (quality) {
+            "128" -> arrayOf("MP3_128", "MP3_64", "MP3_MISC")
+            "flac" -> arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
+            else -> arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
         }
 
         val requestBody = json.encodeToString(
@@ -379,7 +373,7 @@ class DeezerApi {
         val response = clientNP.newCall(request).execute()
         val responseBody = response.body.string()
 
-        json.decodeFromString<JsonObject>(responseBody)
+        return json.decodeFromString<JsonObject>(responseBody)
     }
 
     suspend fun search(query: String): JsonObject {
@@ -635,17 +629,15 @@ class DeezerApi {
         )
     }
 
-    suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) = coroutineScope {
+    suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) {
         callApi(
             method = "playlist.addSongs",
             params = buildJsonObject {
                 put("playlist_id", playlist.id)
                 put("songs", buildJsonArray {
-                    tracks.map { track ->
-                        async(Dispatchers.IO) {
-                            add(buildJsonArray { add(track.id); add(0) })
-                        }
-                    }.awaitAll()
+                    tracks.forEach { track ->
+                        add(buildJsonArray { add(track.id); add(0) })
+                    }
                 })
             }
         )
@@ -660,11 +652,9 @@ class DeezerApi {
             params = buildJsonObject {
                 put("playlist_id", playlist.id)
                 put("songs", buildJsonArray {
-                    ids.map { id ->
-                        async(Dispatchers.IO) {
-                            add(buildJsonArray { add(id); add(0) })
-                        }
-                    }.awaitAll()
+                    ids.forEach { id ->
+                        add(buildJsonArray { add(id); add(0) })
+                    }
                 })
             }
         )

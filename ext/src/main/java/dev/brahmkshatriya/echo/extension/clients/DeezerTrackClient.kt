@@ -47,32 +47,29 @@ class DeezerTrackClient(private val api: DeezerApi) {
             return@coroutineScope newTrack
         }
 
-        val jsonObjectDeferred = async {
+        val jsonObject =
             if (newTrack.extras["FILESIZE_MP3_MISC"] != "0" && newTrack.extras["FILESIZE_MP3_MISC"] != null) {
                 api.getMP3MediaUrl(newTrack)
             } else {
                 api.getMediaUrl(newTrack, quality)
             }
-        }
 
         val key = Utils.createBlowfishKey(newTrack.id)
 
-        suspend fun generateUrl(trackId: String, md5Origin: String, mediaVersion: String): String =
-            withContext(Dispatchers.IO) {
-                var url = generateTrackUrl(trackId, md5Origin, mediaVersion, 1)
-                val request = Request.Builder().url(url).build()
-                val code = client.newCall(request).execute().code
-                if (code == 403) {
-                    val fallbackObject = fetchTrackData(track)["FALLBACK"]!!.jsonObject
-                    val backMd5Origin = fallbackObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
-                    val backMediaVersion =
-                        fallbackObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-                    url = generateTrackUrl(trackId, backMd5Origin, backMediaVersion, 1)
-                }
-                url
+        suspend fun generateUrl(trackId: String, md5Origin: String, mediaVersion: String): String {
+            var url = generateTrackUrl(trackId, md5Origin, mediaVersion, 1)
+            val request = Request.Builder().url(url).build()
+            val code = client.newCall(request).execute().code
+            if (code == 403) {
+                val fallbackObject = fetchTrackData(track)["FALLBACK"]!!.jsonObject
+                val backMd5Origin = fallbackObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
+                val backMediaVersion =
+                    fallbackObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
+                url = generateTrackUrl(trackId, backMd5Origin, backMediaVersion, 1)
             }
+            return url
+        }
 
-        val jsonObject = jsonObjectDeferred.await()
         val url = when {
             jsonObject.toString()
                 .contains("Track token has no sufficient rights on requested media") -> {

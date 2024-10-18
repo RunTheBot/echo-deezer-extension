@@ -19,7 +19,7 @@ class DeezerArtistClient(private val api: DeezerApi) {
             val jsonObject = api.artist(artist.id)
             val resultsObject = jsonObject["results"]!!.jsonObject
 
-            val keyToBlock: Map<String, suspend (JsonObject) -> Shelf?> = mapOf(
+            val keyToBlock: Map<String, (JsonObject) -> Shelf?> = mapOf(
                 "TOP" to { jObject ->
                     val shelf =
                         jObject["data"]?.jsonArray?.toShelfItemsList("Top") as Shelf.Lists.Items
@@ -68,7 +68,8 @@ class DeezerArtistClient(private val api: DeezerApi) {
         val jsonObject = api.artist(artist.id)
         val resultsObject =
             jsonObject["results"]?.jsonObject?.get("DATA")?.jsonObject ?: return artist
-        return resultsObject.toArtist(isFollowingArtist(artist.id), true)
+        val isFollowing = isFollowingArtist(artist.id)
+        return resultsObject.toArtist(isFollowing, true)
     }
 
     private suspend fun isFollowingArtist(id: String): Boolean {

@@ -11,7 +11,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -79,16 +78,16 @@ class DeezerLibraryClient(private val api: DeezerApi) {
         list
     }
 
-    private suspend fun fetchData(apiCall: suspend () -> JsonObject): List<Shelf> = withContext(Dispatchers.IO) {
+    private suspend fun fetchData(apiCall: suspend () -> JsonObject): List<Shelf> {
         val jsonObject = apiCall()
-        val resultObject = jsonObject["results"]?.jsonObject ?: return@withContext emptyList()
+        val resultObject = jsonObject["results"]?.jsonObject ?: return emptyList()
         val dataArray = when {
             resultObject["data"] != null -> resultObject["data"]!!.jsonArray
             resultObject["TAB"] != null -> resultObject["TAB"]!!.jsonObject.values.firstOrNull()?.jsonObject?.get("data")?.jsonArray
             else -> null
         }
 
-        dataArray?.mapNotNull { item ->
+        return dataArray?.mapNotNull { item ->
             item.jsonObject.toEchoMediaItem()?.toShelf()
         } ?: emptyList()
     }
