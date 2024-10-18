@@ -22,3 +22,27 @@
 
 -keep class dev.brahmkshatriya.echo.** { *; }
 -dontwarn org.slf4j.impl.StaticLoggerBinder
+
+-dontwarn okhttp3.Call
+-dontwarn okhttp3.ConnectionPool
+-dontwarn okhttp3.Headers$Builder
+-dontwarn okhttp3.Headers$Companion
+-dontwarn okhttp3.Headers
+-dontwarn okhttp3.HttpUrl$Builder
+-dontwarn okhttp3.HttpUrl$Companion
+-dontwarn okhttp3.HttpUrl
+-dontwarn okhttp3.Interceptor$Chain
+-dontwarn okhttp3.Interceptor
+-dontwarn okhttp3.MediaType$Companion
+-dontwarn okhttp3.MediaType
+-dontwarn okhttp3.OkHttpClient$Builder
+-dontwarn okhttp3.OkHttpClient
+-dontwarn okhttp3.Protocol
+-dontwarn okhttp3.Request$Builder
+-dontwarn okhttp3.Request
+-dontwarn okhttp3.RequestBody$Companion
+-dontwarn okhttp3.RequestBody
+-dontwarn okhttp3.Response$Builder
+-dontwarn okhttp3.Response
+-dontwarn okhttp3.ResponseBody$Companion
+-dontwarn okhttp3.ResponseBody

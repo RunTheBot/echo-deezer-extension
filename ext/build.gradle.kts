@@ -20,9 +20,7 @@ dependencies {
     val libVersion: String by project
     compileOnly("com.github.brahmkshatriya:echo:$libVersion")
 
-    implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
-    implementation("com.squareup.okhttp3:okhttp-coroutines:5.0.0-alpha.14")
-    implementation("io.ktor:ktor-utils:3.0.0-beta-2")
+    compileOnly("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }
