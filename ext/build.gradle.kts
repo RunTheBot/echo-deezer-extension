@@ -21,8 +21,6 @@ dependencies {
     compileOnly("com.github.brahmkshatriya:echo:$libVersion")
 
     compileOnly("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
-
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }
 
 val extType: String by project
