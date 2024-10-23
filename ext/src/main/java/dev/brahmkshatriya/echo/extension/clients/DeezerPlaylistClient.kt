@@ -5,14 +5,12 @@ import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
-import dev.brahmkshatriya.echo.extension.toPlaylist
-import dev.brahmkshatriya.echo.extension.toShelfItemsList
-import dev.brahmkshatriya.echo.extension.toTrack
+import dev.brahmkshatriya.echo.extension.DeezerParser
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
-class DeezerPlaylistClient(private val api: DeezerApi) {
+class DeezerPlaylistClient(private val api: DeezerApi, private val parser: DeezerParser) {
 
     fun getShelves(playlist: Playlist): PagedData.Single<Shelf> = PagedData.Single {
         val jsonObject = api.playlist(playlist)
@@ -20,7 +18,9 @@ class DeezerPlaylistClient(private val api: DeezerApi) {
         val songsObject = resultsObject["SONGS"]!!.jsonObject
         val dataArray = songsObject["data"]?.jsonArray ?: JsonArray(emptyList())
         val data = dataArray.mapNotNull { song ->
-            song.jsonObject.toShelfItemsList(name = "")
+            parser.run {
+                song.jsonObject.toShelfItemsList(name = "")
+            }
         }
         //data
         emptyList()
@@ -29,15 +29,15 @@ class DeezerPlaylistClient(private val api: DeezerApi) {
     suspend fun loadPlaylist(playlist: Playlist): Playlist {
         val jsonObject = api.playlist(playlist)
         val resultsObject = jsonObject["results"]!!.jsonObject
-        return resultsObject.toPlaylist(true)
+        return parser.run { resultsObject.toPlaylist(true) }
     }
 
     fun loadTracks(playlist: Playlist): PagedData<Track> = PagedData.Single {
         val jsonObject = api.playlist(playlist)
         val dataArray = jsonObject["results"]!!.jsonObject["SONGS"]!!.jsonObject["data"]!!.jsonArray
         dataArray.mapIndexed { index, song ->
-            val currentTrack = song.jsonObject.toTrack()
-            val nextTrack = dataArray.getOrNull(index + 1)?.jsonObject?.toTrack()
+            val currentTrack = parser.run { song.jsonObject.toTrack() }
+            val nextTrack = parser.run { dataArray.getOrNull(index + 1)?.jsonObject?.toTrack() }
             Track(
                 id = currentTrack.id,
                 title = currentTrack.title,

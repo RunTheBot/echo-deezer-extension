@@ -39,7 +39,6 @@ import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.Settings
 import dev.brahmkshatriya.echo.extension.DeezerCountries.getDefaultCountryIndex
 import dev.brahmkshatriya.echo.extension.DeezerCountries.getDefaultLanguageIndex
-import dev.brahmkshatriya.echo.extension.DeezerUtils.settings
 import dev.brahmkshatriya.echo.extension.clients.DeezerAlbumClient
 import dev.brahmkshatriya.echo.extension.clients.DeezerArtistClient
 import dev.brahmkshatriya.echo.extension.clients.DeezerHomeFeedClient
@@ -63,7 +62,9 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
     LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput, LibraryClient,
     PlaylistEditClient, SaveToLibraryClient {
 
-    private val api = DeezerApi()
+    private val session = DeezerSession.getInstance()
+    private val api = DeezerApi(session)
+    private val parser = DeezerParser(session)
 
     override val settingItems: List<Setting>
         get() = listOf(
@@ -118,7 +119,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
                         "Choose your preferred language for loaded stuff",
                         DeezerCountries.languageEntryTitles,
                         DeezerCountries.languageEntryValues,
-                        getDefaultLanguageIndex(settings)
+                        getDefaultLanguageIndex(session.settings)
                     ),
                     SettingList(
                         "Country",
@@ -126,25 +127,21 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
                         "Choose your preferred country for browse recommendations",
                         DeezerCountries.countryEntryTitles,
                         DeezerCountries.countryEntryValues,
-                        getDefaultCountryIndex(settings)
+                        getDefaultCountryIndex(session.settings)
                     )
                 )
             ),
         )
 
-    init {
-        initializeCredentials()
-    }
-
     override fun setSettings(settings: Settings) {
-        DeezerUtils.settings = settings
+        session.settings = settings
     }
 
     override suspend fun onExtensionSelected() {}
 
     //<============= HomeTab =============>
 
-    private val deezerHomeFeedClient = DeezerHomeFeedClient(api)
+    private val deezerHomeFeedClient = DeezerHomeFeedClient(api, parser)
 
     override suspend fun getHomeTabs(): List<Tab> = listOf()
 
@@ -152,7 +149,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     //<============= Library =============>
 
-    private val deezerLibraryClient = DeezerLibraryClient(api)
+    private val deezerLibraryClient = DeezerLibraryClient(api, parser)
 
     override suspend fun getLibraryTabs(): List<Tab> = deezerLibraryClient.getLibraryTabs()
 
@@ -222,7 +219,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
         val playlistObject = tabObject["playlists"]!!.jsonObject
         val dataArray = playlistObject["data"]!!.jsonArray
         dataArray.map {
-            val playlist = it.jsonObject.toPlaylist()
+            val playlist = parser.run { it.jsonObject.toPlaylist() }
             if (playlist.isEditable) {
                 playlistList.add(playlist)
             }
@@ -303,7 +300,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     //<============= Search =============>
 
-    private val deezerSearchClient = DeezerSearchClient(api, history)
+    private val deezerSearchClient = DeezerSearchClient(api, history, parser)
 
     override suspend fun quickSearch(query: String?): List<QuickSearch.QueryItem> = deezerSearchClient.quickSearch(query)
 
@@ -322,7 +319,9 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
         return coroutineScope {
             channelSections.map { section ->
                 async(Dispatchers.IO) {
-                    section.toShelfItemsList(section.jsonObject["title"]!!.jsonPrimitive.content)
+                    parser.run {
+                        section.toShelfItemsList(section.jsonObject["title"]!!.jsonPrimitive.content)
+                    }
                 }
             }.awaitAll().filterNotNull()
         }
@@ -330,7 +329,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     //<============= Play =============>
 
-    private val deezerTrackClient = DeezerTrackClient(api)
+    private val deezerTrackClient = DeezerTrackClient(api, parser)
 
     override suspend fun getStreamableMedia(streamable: Streamable): Streamable.Media = deezerTrackClient.getStreamableMedia(streamable)
 
@@ -340,7 +339,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     //<============= Radio =============>
 
-    private val deezerRadioClient = DeezerRadioClient(api)
+    private val deezerRadioClient = DeezerRadioClient(api, parser)
 
     override fun loadTracks(radio: Radio): PagedData<Track> = deezerRadioClient.loadTracks(radio)
 
@@ -366,7 +365,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     //<============= Album =============>
 
-    private val deezerAlbumClient = DeezerAlbumClient(api)
+    private val deezerAlbumClient = DeezerAlbumClient(api, parser)
 
     override fun getShelves(album: Album): PagedData.Single<Shelf> = getShelves(album.artists.first())
 
@@ -376,7 +375,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     //<============= Playlist =============>
 
-    private val deezerPlaylistClient = DeezerPlaylistClient(api)
+    private val deezerPlaylistClient = DeezerPlaylistClient(api, parser)
 
     override fun getShelves(playlist: Playlist): PagedData.Single<Shelf> = deezerPlaylistClient.getShelves(playlist)
 
@@ -386,7 +385,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     //<============= Artist =============>
 
-    private val deezerArtistClient = DeezerArtistClient(api)
+    private val deezerArtistClient = DeezerArtistClient(api, parser)
 
     override fun getShelves(artist: Artist): PagedData.Single<Shelf> = deezerArtistClient.getShelves(artist)
 
@@ -425,7 +424,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
         val arl = extractCookieValue(data, "arl")
         val sid = extractCookieValue(data, "sid")
         if (arl != null && sid != null) {
-            DeezerCredentialsHolder.updateCredentials(arl = arl, sid = sid)
+            session.updateCredentials(arl = arl, sid = sid)
             return api.makeUser()
         } else {
             throw Exception("Failed to retrieve ARL and SID from cookies")
@@ -448,7 +447,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
         )
 
     override suspend fun onLogin(data: Map<String, String?>): List<User> {
-        DeezerCredentialsHolder.updateCredentials(arl = data["arl"] ?: "")
+        session.updateCredentials(arl = data["arl"] ?: "")
         api.getSid()
         val userList = api.makeUser()
         return userList
@@ -456,8 +455,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     override suspend fun onLogin(username: String, password: String): List<User> {
         // Set shared credentials
-        DeezerCredentialsHolder.updateCredentials(email = username)
-        DeezerCredentialsHolder.updateCredentials(pass = password)
+        session.updateCredentials(email = username, pass = password)
 
         api.getArlByEmail(username, password)
         val userList = api.makeUser(username, password)
@@ -466,7 +464,7 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     override suspend fun onSetLoginUser(user: User?) {
         if (user != null) {
-            DeezerCredentialsHolder.updateCredentials(
+            session.updateCredentials(
                 arl = user.extras["arl"] ?: "",
                 sid = user.extras["sid"] ?: "",
                 token = user.extras["token"] ?: "",
@@ -493,39 +491,15 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     //<============= Utils =============>
 
-    private fun initializeCredentials() {
-        if (DeezerCredentialsHolder.credentials == null) {
-            DeezerCredentialsHolder.initialize(
-                DeezerCredentials(
-                    arl = "",
-                    sid = "",
-                    token = "",
-                    userId = "",
-                    licenseToken = "",
-                    email = "",
-                    pass = ""
-                )
-            )
-        }
-    }
-
     fun handleArlExpiration() {
-        if (arl.isEmpty() || arlExpired) throw ClientException.LoginRequired()
+        if (session.credentials?.arl?.isEmpty() == true || session.arlExpired) throw ClientException.LoginRequired()
     }
 
-    private val arl: String get() = credentials.arl
-    private val arlExpired: Boolean get() = utils.arlExpired
-    private val credentials: DeezerCredentials
-        get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException(
-            LOGIN_REQUIRED_MESSAGE
-        )
-    private val utils: DeezerUtils get() = DeezerUtils
-    private val quality: String get() = settings?.getString("audio_quality") ?: DEFAULT_QUALITY
-    private val log: Boolean get() = settings?.getBoolean("log") ?: false
-    private val history: Boolean get() = settings?.getBoolean("history") ?: true
+    private val quality: String get() = session.settings?.getString("audio_quality") ?: DEFAULT_QUALITY
+    private val log: Boolean get() = session.settings?.getBoolean("log") ?: false
+    private val history: Boolean get() = session.settings?.getBoolean("history") ?: true
 
     companion object {
         private const val DEFAULT_QUALITY = "320"
-        private const val LOGIN_REQUIRED_MESSAGE = "DeezerCredentials not initialized"
     }
 }

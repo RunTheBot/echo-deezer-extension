@@ -5,8 +5,7 @@ import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import dev.brahmkshatriya.echo.extension.DeezerExtension
-import dev.brahmkshatriya.echo.extension.toEchoMediaItem
-import dev.brahmkshatriya.echo.extension.toShelfItemsList
+import dev.brahmkshatriya.echo.extension.DeezerParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -15,7 +14,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
-class DeezerLibraryClient(private val api: DeezerApi) {
+class DeezerLibraryClient(private val api: DeezerApi, private val parser: DeezerParser) {
 
     @Volatile
     private var allTabs: Pair<String, List<Shelf>>? = null
@@ -53,8 +52,9 @@ class DeezerLibraryClient(private val api: DeezerApi) {
                         "tracks" -> resultObject["data"]?.jsonArray
                         else -> return@async null
                     }
-
-                    dataArray?.toShelfItemsList(tab.name)
+                    parser.run {
+                        dataArray?.toShelfItemsList(tab.name)
+                    }
                 }
             }.awaitAll().filterNotNull()
         }
@@ -88,7 +88,9 @@ class DeezerLibraryClient(private val api: DeezerApi) {
         }
 
         return dataArray?.mapNotNull { item ->
-            item.jsonObject.toEchoMediaItem()?.toShelf()
+            parser.run {
+                item.jsonObject.toEchoMediaItem()?.toShelf()
+            }
         } ?: emptyList()
     }
 }

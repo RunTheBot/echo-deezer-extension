@@ -5,21 +5,20 @@ import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.extension.DeezerApi
-import dev.brahmkshatriya.echo.extension.toArtist
-import dev.brahmkshatriya.echo.extension.toShelfItemsList
+import dev.brahmkshatriya.echo.extension.DeezerParser
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-class DeezerArtistClient(private val api: DeezerApi) {
+class DeezerArtistClient(private val api: DeezerApi, private val parser: DeezerParser) {
 
     fun getShelves(artist: Artist): PagedData.Single<Shelf> = PagedData.Single {
         try {
             val jsonObject = api.artist(artist.id)
             val resultsObject = jsonObject["results"]!!.jsonObject
 
-            val keyToBlock: Map<String, (JsonObject) -> Shelf?> = mapOf(
+            val keyToBlock: Map<String, (JsonObject) -> Shelf?> = parser.run { mapOf(
                 "TOP" to { jObject ->
                     val shelf =
                         jObject["data"]?.jsonArray?.toShelfItemsList("Top") as Shelf.Lists.Items
@@ -53,11 +52,23 @@ class DeezerArtistClient(private val api: DeezerApi) {
                 "ALBUMS" to { jObject ->
                     jObject["data"]?.jsonArray?.toShelfItemsList("Albums")
                 }
+            ) }
+
+            val orderedKeys = listOf(
+                "TOP",
+                "HIGHLIGHT",
+                "SELECTED_PLAYLIST",
+                "ALBUMS",
+                "RELATED_PLAYLIST",
+                "RELATED_ARTISTS"
             )
 
-            resultsObject.mapNotNull { (key, value) ->
+            orderedKeys.mapNotNull { key ->
+                val value = resultsObject[key]
                 val block = keyToBlock[key]
-                block?.invoke(value.jsonObject)
+                if (value != null && block != null) {
+                    block.invoke(value.jsonObject)
+                } else null
             }
         } catch (e: Exception) {
             emptyList()
@@ -69,7 +80,7 @@ class DeezerArtistClient(private val api: DeezerApi) {
         val resultsObject =
             jsonObject["results"]?.jsonObject?.get("DATA")?.jsonObject ?: return artist
         val isFollowing = isFollowingArtist(artist.id)
-        return resultsObject.toArtist(isFollowing, true)
+        return parser.run { resultsObject.toArtist(isFollowing, true) }
     }
 
     private suspend fun isFollowingArtist(id: String): Boolean {

@@ -3,16 +3,6 @@ package dev.brahmkshatriya.echo.extension
 import dev.brahmkshatriya.echo.common.settings.Settings
 import java.util.Locale
 
-data class DeezerCredentials(
-    val arl: String,
-    val sid: String,
-    val token: String,
-    val userId: String,
-    val licenseToken: String,
-    val email: String,
-    val pass: String
-)
-
 object DeezerCountries {
     fun getDefaultCountryIndex(settings: Settings?): Int {
         val storedCountryCode = settings?.getString("countryCode")
@@ -91,47 +81,3 @@ object DeezerCountries {
         "fi-FI", "sl-SI", "uk-UA"
     )
 }
-
-object DeezerUtils {
-    var settings: Settings? = null
-
-    private var _arlExpired: Boolean = false
-    val arlExpired: Boolean
-        get() = _arlExpired
-
-    fun setArlExpired(expired: Boolean) {
-        _arlExpired = expired
-    }
-}
-
-object DeezerCredentialsHolder {
-    @Volatile
-    private var _credentials: DeezerCredentials? = null
-    val credentials: DeezerCredentials?
-        get() = _credentials
-
-    fun initialize(credentials: DeezerCredentials) {
-        if (_credentials == null) {
-            _credentials = credentials
-        } else {
-            throw IllegalStateException("Credentials are already initialized")
-        }
-    }
-
-    private val lock = Any()
-
-    fun updateCredentials(arl: String? = null, sid: String? = null, token: String? = null, userId: String? = null, licenseToken: String? = null, email: String? = null, pass: String? = null) {
-        synchronized(lock) {
-            _credentials = _credentials?.copy(
-                arl = arl ?: _credentials!!.arl,
-                sid = sid ?: _credentials!!.sid,
-                token = token ?: _credentials!!.token,
-                userId = userId ?: _credentials!!.userId,
-                licenseToken = licenseToken ?: _credentials!!.licenseToken,
-                email = email ?: _credentials!!.email,
-                pass = pass ?: _credentials!!.pass
-            ) ?: throw IllegalStateException("Credentials are not initialized")
-        }
-    }
-}
-

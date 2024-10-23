@@ -39,33 +39,30 @@ import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-class DeezerApi {
+class DeezerApi(private val session: DeezerSession) {
+
     init {
-        // Ensure credentials are initialized when the API is first used
-        if (DeezerCredentialsHolder.credentials == null) {
-            // Example initialization with placeholder values
-            DeezerCredentialsHolder.initialize(
-                DeezerCredentials(
-                    arl = "",
-                    sid = "",
-                    token = "",
-                    userId = "",
-                    licenseToken = "",
-                    email = "",
-                    pass = ""
-                )
+        if (session.credentials == null) {
+            session.credentials = DeezerCredentials(
+                arl = "",
+                sid = "",
+                token = "",
+                userId = "",
+                licenseToken = "",
+                email = "",
+                pass = ""
             )
         }
     }
 
     private val language: String
-        get() = DeezerUtils.settings?.getString("lang") ?: Locale.getDefault().toLanguageTag()
+        get() = session.settings?.getString("lang") ?: Locale.getDefault().toLanguageTag()
 
     private val country: String
-        get() = DeezerUtils.settings?.getString("country") ?: Locale.getDefault().country
+        get() = session.settings?.getString("country") ?: Locale.getDefault().country
 
     private val credentials: DeezerCredentials
-        get() = DeezerCredentialsHolder.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
+        get() = session.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
 
     private val arl: String
         get() = credentials.arl
@@ -101,7 +98,7 @@ class DeezerApi {
                     originalResponse
                 }
             }
-            if (useProxy && DeezerUtils.settings?.getBoolean("proxy") == true) {
+            if (useProxy && session.settings?.getBoolean("proxy") == true) {
                 sslSocketFactory(createTrustAllSslSocketFactory(), createTrustAllTrustManager())
                 hostnameVerifier { _, _ -> true }
                 proxy(
@@ -197,17 +194,17 @@ class DeezerApi {
         if (method == "deezer.getUserData") {
             response.headers.forEach {
                 if (it.second.startsWith("sid=")) {
-                    DeezerCredentialsHolder.updateCredentials(sid = it.second.substringAfter("sid=").substringBefore(";"))
+                    session.updateCredentials(sid = it.second.substringAfter("sid=").substringBefore(";"))
                 }
             }
         }
 
         if (responseBody.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"")) {
             if (email.isEmpty() && pass.isEmpty()) {
-                DeezerUtils.setArlExpired(true)
+                session.isArlExpired(true)
                 throw Exception("Please re-login (Best use User + Pass method)")
             } else {
-                DeezerUtils.setArlExpired(false)
+                session.isArlExpired(false)
                 val userList = DeezerExtension().onLogin(email, pass)
                 DeezerExtension().onSetLoginUser(userList.first())
                 return@withContext callApi(method, params, gatewayInput)
@@ -264,12 +261,12 @@ class DeezerApi {
         // Get access token
         val responseJson = getToken(params)
         val apiResponse = json.decodeFromString<JsonObject>(responseJson)
-        DeezerCredentialsHolder.updateCredentials(token = apiResponse.jsonObject["access_token"]!!.jsonPrimitive.content)
+        session.updateCredentials(token = apiResponse.jsonObject["access_token"]!!.jsonPrimitive.content)
 
         // Get ARL
         val arlResponse = callApi("user.getArl")
         val arlObject = json.decodeFromString<JsonObject>(arlResponse)
-        DeezerCredentialsHolder.updateCredentials(arl = arlObject["results"]!!.jsonPrimitive.content)
+        session.updateCredentials(arl = arlObject["results"]!!.jsonPrimitive.content)
     }
 
     private fun md5(input: String): String {
@@ -311,7 +308,7 @@ class DeezerApi {
         val response = client.newCall(request).execute()
         response.headers.forEach {
             if (it.second.startsWith("sid=")) {
-                DeezerCredentialsHolder.updateCredentials(sid = it.second.substringAfter("sid=").substringBefore(";"))
+                session.updateCredentials(sid = it.second.substringAfter("sid=").substringBefore(";"))
             }
         }
     }

@@ -76,21 +76,22 @@ object Utils {
 }
 
 suspend fun getByteChannel(
-    scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    scope: CoroutineScope,
     streamable: Streamable,
     client: OkHttpClient,
     contentLength: Long
-): ByteChannel = withContext(Dispatchers.IO) {
+): ByteChannel {
     val url = streamable.id
     val key = streamable.extra["key"] ?: ""
 
     val byteChannel = ByteChannel(true)
+    var lastActivityTime = System.currentTimeMillis()
 
     scope.launch {
         val clientWithTimeouts = client.newBuilder()
-            .readTimeout(60, TimeUnit.SECONDS)
-            .connectTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.SECONDS)
+            .connectTimeout(0, TimeUnit.SECONDS)
+            .writeTimeout(0, TimeUnit.SECONDS)
             .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
             .protocols(listOf(Protocol.HTTP_1_1))
             .retryOnConnectionFailure(true)
@@ -113,7 +114,12 @@ suspend fun getByteChannel(
             response.body.byteStream().use { byteStream ->
                 var shouldReopen = false
 
-                while (totalBytesRead < contentLength) {
+                while (totalBytesRead < contentLength && !shouldReopen) {
+                    if (System.currentTimeMillis() - lastActivityTime > 300_000L) {
+                        shouldReopen = true
+                        break
+                    }
+
                     val buffer = ByteArray(2048)
                     var bytesRead: Int
                     var totalRead = 0
@@ -126,6 +132,8 @@ suspend fun getByteChannel(
                                 break
                             }
                             totalRead += bytesRead
+
+                            lastActivityTime = System.currentTimeMillis()
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -139,6 +147,11 @@ suspend fun getByteChannel(
                     }
 
                     try {
+                        if (System.currentTimeMillis() - lastActivityTime > 300_000L) {
+                            shouldReopen = true
+                            break
+                        }
+
                         if (totalRead != 2048) {
                             byteChannel.writeFully(buffer, 0, totalRead)
                         } else {
@@ -149,6 +162,8 @@ suspend fun getByteChannel(
                                 byteChannel.writeFully(buffer, 0, totalRead)
                             }
                         }
+
+                        lastActivityTime = System.currentTimeMillis()
                     } catch (e: IOException) {
                         e.printStackTrace()
                         println("Exception occurred while writing to channel: ${e.message}")
@@ -166,11 +181,11 @@ suspend fun getByteChannel(
         }
     }
 
-    byteChannel
+    return byteChannel
 }
 
 suspend fun getByteStreamAudio(
-    scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    scope: CoroutineScope,
     streamable: Streamable,
     client: OkHttpClient
 ): Streamable.Media {

@@ -5,10 +5,10 @@ import dev.brahmkshatriya.echo.common.models.Streamable.Audio.Companion.toAudio
 import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toMedia
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
+import dev.brahmkshatriya.echo.extension.DeezerParser
 import dev.brahmkshatriya.echo.extension.Utils
 import dev.brahmkshatriya.echo.extension.generateTrackUrl
 import dev.brahmkshatriya.echo.extension.getByteStreamAudio
-import dev.brahmkshatriya.echo.extension.toTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,7 +19,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-class DeezerTrackClient(private val api: DeezerApi) {
+class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerParser) {
 
     private val client = OkHttpClient()
 
@@ -38,7 +38,7 @@ class DeezerTrackClient(private val api: DeezerApi) {
             return trackObject["results"]!!.jsonObject["data"]!!.jsonArray[0].jsonObject
         }
 
-        val newTrack = fetchTrackData(track).toTrack(loaded = true).copy(extras = track.extras)
+        val newTrack = parser.run { fetchTrackData(track).toTrack(loaded = true).copy(extras = track.extras) }
 
         if (newTrack.extras["__TYPE__"] == "show") {
             return newTrack

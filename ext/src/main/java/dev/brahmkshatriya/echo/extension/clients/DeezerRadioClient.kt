@@ -8,11 +8,11 @@ import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Radio
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
-import dev.brahmkshatriya.echo.extension.toTrack
+import dev.brahmkshatriya.echo.extension.DeezerParser
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
-class DeezerRadioClient(private val api: DeezerApi) {
+class DeezerRadioClient(private val api: DeezerApi, private val parser: DeezerParser) {
 
     fun loadTracks(radio: Radio): PagedData<Track> = PagedData.Single {
         val dataArray = when (radio.extras["radio"]) {
@@ -38,8 +38,8 @@ class DeezerRadioClient(private val api: DeezerApi) {
         }
 
         dataArray.mapIndexed { index, song ->
-            val track = song.jsonObject.toTrack()
-            val nextTrack = dataArray.getOrNull(index + 1)?.jsonObject?.toTrack()
+            val track = parser.run { song.jsonObject.toTrack() }
+            val nextTrack = parser.run { dataArray.getOrNull(index + 1)?.jsonObject?.toTrack() }
             val nextTrackId = nextTrack?.id
 
             Track(
@@ -162,7 +162,7 @@ class DeezerRadioClient(private val api: DeezerApi) {
         val jsonObject = api.album(album)
         val resultsObject = jsonObject["results"]!!.jsonObject
         val songsObject = resultsObject["SONGS"]!!.jsonObject
-        val lastTrack = songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack()
+        val lastTrack = parser.run { songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack() }
         return Radio(
             id = lastTrack.id,
             title = lastTrack.title,
@@ -178,7 +178,7 @@ class DeezerRadioClient(private val api: DeezerApi) {
         val jsonObject = api.playlist(playlist)
         val resultsObject = jsonObject["results"]!!.jsonObject
         val songsObject = resultsObject["SONGS"]!!.jsonObject
-        val lastTrack = songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack()
+        val lastTrack = parser.run { songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack() }
         return Radio(
             id = lastTrack.id,
             title = lastTrack.title,

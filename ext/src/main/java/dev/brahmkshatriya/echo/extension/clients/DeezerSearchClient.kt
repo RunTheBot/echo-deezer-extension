@@ -6,9 +6,7 @@ import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import dev.brahmkshatriya.echo.extension.DeezerExtension
-import dev.brahmkshatriya.echo.extension.toEchoMediaItem
-import dev.brahmkshatriya.echo.extension.toShelfCategoryList
-import dev.brahmkshatriya.echo.extension.toShelfItemsList
+import dev.brahmkshatriya.echo.extension.DeezerParser
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -19,7 +17,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.util.Locale
 
-class DeezerSearchClient(private val api: DeezerApi, private val history: Boolean) {
+class DeezerSearchClient(private val api: DeezerApi, private val history: Boolean, private val parser: DeezerParser) {
 
     @Volatile
     private var oldSearch: Pair<String, List<Shelf>>? = null
@@ -80,7 +78,9 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
             val dataArray = tabObject?.get("data")?.jsonArray
 
             dataArray?.mapNotNull { item ->
-                item.jsonObject.toEchoMediaItem()?.toShelf()
+                parser.run {
+                    item.jsonObject.toEchoMediaItem()?.toShelf()
+                }
             } ?: emptyList()
         }
 
@@ -99,12 +99,16 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
                 "67aa1c1b-7873-488d-88a0-55b6596cf4d6", "486313b7-e3c7-453d-ba79-27dc6bea20ce",
                 "1d8dfed4-582f-40e1-b29c-760b44c0301e", "ecb89e7c-1c07-4922-aa50-d29745576636",
                 "64ac680b-7c84-49a3-9077-38e9b653332e" -> {
-                    section.toShelfItemsList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty())
+                    parser.run {
+                        section.toShelfItemsList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty())
+                    }
                 }
 
                 "8b2c6465-874d-4752-a978-1637ca0227b5" -> {
-                    section.toShelfCategoryList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty()) { target ->
-                        DeezerExtension().channelFeed(target)
+                    parser.run {
+                        section.toShelfCategoryList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty()) { target ->
+                            DeezerExtension().channelFeed(target)
+                        }
                     }
                 }
 
@@ -138,7 +142,9 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
             val name = tab.id
             val tabObject = resultObject?.get(name)?.jsonObject
             val dataArray = tabObject?.get("data")?.jsonArray
-            dataArray?.toShelfItemsList(name.lowercase().capitalize(Locale.ROOT))
+            parser.run {
+                dataArray?.toShelfItemsList(name.lowercase().capitalize(Locale.ROOT))
+            }
         }
         return listOf(Tab("All", "All")) + tabs
     }
