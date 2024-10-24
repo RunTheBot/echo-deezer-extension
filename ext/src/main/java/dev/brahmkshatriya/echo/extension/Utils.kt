@@ -26,7 +26,7 @@ object Utils {
     private const val SECRET = "g4el58wc0zvf9na1"
     private val secretIvSpec = IvParameterSpec(byteArrayOf(0,1,2,3,4,5,6,7))
 
-    private val cipherCache = ConcurrentHashMap<String, Cipher>()
+    private val keySpecCache = ConcurrentHashMap<String, SecretKeySpec>()
 
     private fun bitwiseXor(firstVal: Char, secondVal: Char, thirdVal: Char): Char {
         return (firstVal.code xor secondVal.code xor thirdVal.code).toChar()
@@ -44,10 +44,9 @@ object Utils {
         return blowfishKey.toString()
     }
 
-    private fun createCipher(blowfishKey: String): Cipher {
-        return Cipher.getInstance("BLOWFISH/CBC/NoPadding").apply {
-            val secretKeySpec = SecretKeySpec(blowfishKey.toByteArray(), "Blowfish")
-            init(Cipher.DECRYPT_MODE, secretKeySpec, secretIvSpec)
+    private fun getSecretKeySpec(blowfishKey: String): SecretKeySpec {
+        return keySpecCache.computeIfAbsent(blowfishKey) {
+            SecretKeySpec(blowfishKey.toByteArray(), "Blowfish")
         }
     }
 
@@ -61,17 +60,18 @@ object Utils {
     }
 
     fun decryptBlowfish(chunk: ByteArray, blowfishKey: String): ByteArray {
-        val cipher = cipherCache.computeIfAbsent(blowfishKey) { createCipher(it) }
+        val secretKeySpec = getSecretKeySpec(blowfishKey)
+        val cipher = Cipher.getInstance("BLOWFISH/CBC/NoPadding").apply {
+            init(Cipher.DECRYPT_MODE, secretKeySpec, secretIvSpec)
+        }
         return cipher.doFinal(chunk)
     }
 
     fun getContentLength(url: String, client: OkHttpClient): Long {
-        var totalLength = 0L
         val request = Request.Builder().url(url).head().build()
-        val response = client.newCall(request).execute()
-        totalLength += response.header("Content-Length")?.toLong() ?: 0L
-        response.close()
-        return totalLength
+        client.newCall(request).execute().use { response ->
+            return response.header("Content-Length")?.toLong() ?: 0L
+        }
     }
 }
 

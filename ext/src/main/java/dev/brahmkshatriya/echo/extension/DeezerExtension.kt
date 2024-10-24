@@ -57,7 +57,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeClient, RadioClient,
+class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClient,
     SearchClient, AlbumClient, ArtistClient, ArtistFollowClient, PlaylistClient, LyricsClient, ShareClient,
     LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput, LibraryClient,
     PlaylistEditClient, SaveToLibraryClient {
@@ -491,8 +491,14 @@ class DeezerExtension : ExtensionClient, HomeFeedClient, TrackClient, TrackLikeC
 
     //<============= Utils =============>
 
-    fun handleArlExpiration() {
-        if (session.credentials?.arl?.isEmpty() == true || session.arlExpired) throw ClientException.LoginRequired()
+    suspend fun handleArlExpiration() {
+        if (session.credentials?.arl?.isEmpty() == true || session.arlExpired) {
+            if (session.credentials?.email?.isEmpty() == true || session.credentials?.pass?.isEmpty() == true) {
+                throw ClientException.LoginRequired()
+            } else {
+                api.makeUser()
+            }
+        }
     }
 
     private val quality: String get() = session.settings?.getString("audio_quality") ?: DEFAULT_QUALITY
