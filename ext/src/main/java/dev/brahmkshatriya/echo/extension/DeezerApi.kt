@@ -1,12 +1,12 @@
 package dev.brahmkshatriya.echo.extension
 
 import dev.brahmkshatriya.echo.common.models.Album
+import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
 import dev.brahmkshatriya.echo.extension.api.DeezerAlbum
 import dev.brahmkshatriya.echo.extension.api.DeezerArtist
-import dev.brahmkshatriya.echo.extension.api.DeezerLogin
 import dev.brahmkshatriya.echo.extension.api.DeezerMedia
 import dev.brahmkshatriya.echo.extension.api.DeezerPlaylist
 import dev.brahmkshatriya.echo.extension.api.DeezerRadio
@@ -19,17 +19,21 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import okhttp3.Headers
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody.Companion.toResponseBody
+import java.math.BigInteger
 import java.net.InetSocketAddress
 import java.net.Proxy
+import java.security.MessageDigest
 import java.util.Locale
 import java.util.zip.GZIPInputStream
 import javax.net.ssl.SSLContext
@@ -88,7 +92,7 @@ class DeezerApi(private val session: DeezerSession) {
     private val pass: String
         get() = credentials.pass
 
-    private fun createOkHttpClient(useProxy: Boolean): OkHttpClient {
+    private fun createOkHttpClient(useProxy: Boolean, login: Boolean = false): OkHttpClient {
         return OkHttpClient.Builder().apply {
             addInterceptor { chain ->
                 val originalResponse = chain.proceed(chain.request())
@@ -102,7 +106,7 @@ class DeezerApi(private val session: DeezerSession) {
                 }
             }
             if (useProxy && session.settings?.getString("proxy")?.isNotEmpty() == true) {
-                val proxy = session.settings?.getString("proxy")
+                val proxy = if (login) "uk.proxy.murglar.app" else session.settings?.getString("proxy").orEmpty()
                 sslSocketFactory(createTrustAllSslSocketFactory(), createTrustAllTrustManager())
                 hostnameVerifier { _, _ -> true }
                 proxy(
@@ -132,6 +136,7 @@ class DeezerApi(private val session: DeezerSession) {
     }
 
     private val client: OkHttpClient get() = createOkHttpClient(useProxy = true)
+    private val clientLog: OkHttpClient get() = createOkHttpClient(useProxy = true , true)
     private val clientNP: OkHttpClient get() = createOkHttpClient(useProxy = false)
 
     private fun getHeaders(method: String? = ""): Headers {
@@ -215,13 +220,104 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Login =============>
 
-    private val deezerLogin = DeezerLogin(this, json, session, client)
+    suspend fun makeUser(email: String = "", pass: String = ""): List<User> {
+        val userList = mutableListOf<User>()
+        val jsonData = callApi("deezer.getUserData")
+        val jObject = json.decodeFromString<JsonObject>(jsonData)
+        val userResults = jObject["results"]!!
+        val userObject = userResults.jsonObject["USER"]!!
+        val token = userResults.jsonObject["checkForm"]!!.jsonPrimitive.content
+        val userId = userObject.jsonObject["USER_ID"]!!.jsonPrimitive.content
+        val licenseToken = userObject.jsonObject["OPTIONS"]!!.jsonObject["license_token"]!!.jsonPrimitive.content
+        val name = userObject.jsonObject["BLOG_NAME"]!!.jsonPrimitive.content
+        val cover = userObject.jsonObject["USER_PICTURE"]!!.jsonPrimitive.content
+        val user = User(
+            id = userId,
+            name = name,
+            cover = "https://e-cdns-images.dzcdn.net/images/user/$cover/100x100-000000-80-0-0.jpg".toImageHolder(),
+            extras = mapOf(
+                "arl" to arl,
+                "user_id" to userId,
+                "sid" to sid,
+                "token" to token,
+                "license_token" to licenseToken,
+                "email" to email,
+                "pass" to pass
+            )
+        )
+        userList.add(user)
+        return userList
+    }
 
-    suspend fun makeUser(email: String = "", pass: String = ""): List<User> = deezerLogin.makeUser(email, pass, arl, sid)
+    suspend fun getArlByEmail(mail: String, password: String) {
+        // Get SID
+        getSid()
 
-    suspend fun getArlByEmail(mail: String, password: String) = deezerLogin.getArlByEmail(mail, password, sid)
+        val clientId = "447462"
+        val clientSecret = "a83bf7f38ad2f137e444727cfc3775cf"
+        val md5Password = md5(password)
 
-    fun getSid() = deezerLogin.getSid()
+        val params = mapOf(
+            "app_id" to clientId,
+            "login" to mail,
+            "password" to md5Password,
+            "hash" to md5(clientId + mail + md5Password + clientSecret)
+        )
+
+        // Get access token
+        val responseJson = getToken(params, sid)
+        val apiResponse = json.decodeFromString<JsonObject>(responseJson)
+        session.updateCredentials(token = apiResponse.jsonObject["access_token"]!!.jsonPrimitive.content)
+
+        // Get ARL
+        val arlResponse = callApi("user.getArl")
+        val arlObject = json.decodeFromString<JsonObject>(arlResponse)
+        session.updateCredentials(arl = arlObject["results"]!!.jsonPrimitive.content)
+    }
+
+    private fun md5(input: String): String {
+        val md = MessageDigest.getInstance("MD5")
+        val digest = md.digest(input.toByteArray())
+        return BigInteger(1, digest).toString(16).padStart(32, '0')
+    }
+
+    private fun getToken(params: Map<String, String>, sid: String): String {
+        val url = "https://connect.deezer.com/oauth/user_auth.php"
+        val httpUrl = url.toHttpUrlOrNull()!!.newBuilder().apply {
+            params.forEach { (key, value) -> addQueryParameter(key, value) }
+        }.build()
+
+        val request = Request.Builder()
+            .url(httpUrl)
+            .get()
+            .headers(
+                Headers.headersOf(
+                    "Cookie", "sid=$sid",
+                    "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                )
+            )
+            .build()
+
+        clientLog.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("Unexpected code $response")
+            return response.body.string()
+        }
+    }
+
+    fun getSid() {
+        val url = "https://www.deezer.com/"
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .build()
+
+        val response = clientLog.newCall(request).execute()
+        response.headers.forEach {
+            if (it.second.startsWith("sid=")) {
+                session.updateCredentials(sid = it.second.substringAfter("sid=").substringBefore(";"))
+            }
+        }
+    }
 
     //<============= Media =============>
 
