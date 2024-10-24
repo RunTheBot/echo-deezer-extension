@@ -5,10 +5,7 @@ import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toMedia
 import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Protocol

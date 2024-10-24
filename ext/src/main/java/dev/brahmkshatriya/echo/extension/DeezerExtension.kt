@@ -3,7 +3,6 @@ package dev.brahmkshatriya.echo.extension
 import dev.brahmkshatriya.echo.common.clients.AlbumClient
 import dev.brahmkshatriya.echo.common.clients.ArtistClient
 import dev.brahmkshatriya.echo.common.clients.ArtistFollowClient
-import dev.brahmkshatriya.echo.common.clients.ExtensionClient
 import dev.brahmkshatriya.echo.common.clients.HomeFeedClient
 import dev.brahmkshatriya.echo.common.clients.LibraryClient
 import dev.brahmkshatriya.echo.common.clients.LoginClient
@@ -68,11 +67,13 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override val settingItems: List<Setting>
         get() = listOf(
-            SettingSwitch(
+            SettingList(
                 "Use Proxy",
                 "proxy",
                 "Use proxy to prevent GEO-Blocking",
-                false
+                mutableListOf("No Proxy", "UK", "RU 1", "RU 2"),
+                mutableListOf("", "uk.proxy.murglar.app", "ru1.proxy.murglar.app", "ru2.proxy.murglar.app"),
+                0
             ),
             SettingSwitch(
                 "Enable Logging",
@@ -313,7 +314,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
     }
 
     suspend fun channelFeed(target: String): List<Shelf> {
-        val jsonObject = api.channelPage(target)
+        val jsonObject = api.page(target.substringAfter("/"))
         val channelPageResults = jsonObject["results"]!!.jsonObject
         val channelSections = channelPageResults["sections"]!!.jsonArray
         return coroutineScope {

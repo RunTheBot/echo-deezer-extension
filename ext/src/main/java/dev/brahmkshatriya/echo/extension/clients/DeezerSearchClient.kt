@@ -90,7 +90,7 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
     private suspend fun browseFeed(): List<Shelf> {
         DeezerExtension().handleArlExpiration()
         api.updateCountry()
-        val jsonObject = api.browsePage()
+        val jsonObject = api.page("channels/explore/explore-tab")
         val browsePageResults = jsonObject["results"]!!.jsonObject
         val browseSections = browsePageResults["sections"]?.jsonArray ?: JsonArray(emptyList())
         return browseSections.mapNotNull { section ->

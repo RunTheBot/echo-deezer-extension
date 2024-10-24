@@ -14,7 +14,7 @@ class DeezerHomeFeedClient(private val api: DeezerApi, private val parser: Deeze
 
     fun getHomeFeed(): PagedData<Shelf> = PagedData.Single {
         DeezerExtension().handleArlExpiration()
-        val homePageResults = api.homePage()["results"]?.jsonObject
+        val homePageResults = api.page("home")["results"]?.jsonObject
         val homeSections = homePageResults?.get("sections")?.jsonArray ?: JsonArray(emptyList())
 
         homeSections.mapNotNull { section ->
