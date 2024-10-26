@@ -39,7 +39,7 @@ Ensure you have Echo installed on your device before proceeding. Currently it's 
 
 ### How is FLAC/320 possible without a Premium Account?
 
-> *"Well, I use a script, or rather a server, that gives back the premium songs. It was created by @uhwot, and I simply stumbled upon it while doing research about stuff for Deezer.*"
+> *"Well, I use a script, or rather a server, that gives back the premium songs. It was created by [@uhwot](https://github.com/uhwot), and I simply stumbled upon it while doing research about stuff for Deezer.*"
 
 ## Acknowledgements
 
