@@ -71,7 +71,7 @@ class DeezerParser(private val session: DeezerSession) {
         )
     }
 
-    fun JsonObject.toShelfCategory(block: suspend (String) -> List<Shelf>): Shelf.Category? {
+    private fun JsonObject.toShelfCategory(block: suspend (String) -> List<Shelf>): Shelf.Category? {
         val data = this["data"]?.jsonObject ?: this
         val type = data["__TYPE__"]?.jsonPrimitive?.content ?: return null
         return when {
@@ -80,7 +80,7 @@ class DeezerParser(private val session: DeezerSession) {
         }
     }
 
-    fun JsonObject.toChannel(block: suspend (String) -> List<Shelf>): Shelf.Category {
+    private fun JsonObject.toChannel(block: suspend (String) -> List<Shelf>): Shelf.Category {
         val data = this["data"]?.jsonObject ?: this
         val title = data["title"]?.jsonPrimitive?.content.orEmpty()
         val target = this["target"]?.jsonPrimitive?.content.orEmpty()
@@ -190,9 +190,10 @@ class DeezerParser(private val session: DeezerSession) {
         val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content.orEmpty()
         val artistObject = data["ARTISTS"]?.jsonArray?.firstOrNull()?.jsonObject ?: data
         val artistMd5 = artistObject["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty()
+        val version = data["VERSION"]?.jsonPrimitive?.content.orEmpty()
         return Track(
             id = data["SNG_ID"]?.jsonPrimitive?.content.orEmpty(),
-            title = data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty(),
+            title = "${data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty()} $version",
             cover = getCover(md5, "cover", loaded),
             duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
             releaseDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toLongOrNull()?.let {
