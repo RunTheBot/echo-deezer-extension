@@ -193,7 +193,7 @@ class DeezerParser(private val session: DeezerSession) {
         val version = data["VERSION"]?.jsonPrimitive?.content.orEmpty()
         return Track(
             id = data["SNG_ID"]?.jsonPrimitive?.content.orEmpty(),
-            title = "${data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty()} $version",
+            title = data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty() + if(version.isNotEmpty()) { " $version" } else { "" } ,
             cover = getCover(md5, "cover", loaded),
             duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
             releaseDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toLongOrNull()?.let {
