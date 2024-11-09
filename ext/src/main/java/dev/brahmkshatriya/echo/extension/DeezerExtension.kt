@@ -15,6 +15,7 @@ import dev.brahmkshatriya.echo.common.clients.SearchClient
 import dev.brahmkshatriya.echo.common.clients.ShareClient
 import dev.brahmkshatriya.echo.common.clients.TrackClient
 import dev.brahmkshatriya.echo.common.clients.TrackLikeClient
+import dev.brahmkshatriya.echo.common.clients.TrackerClient
 import dev.brahmkshatriya.echo.common.helpers.ClientException
 import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
@@ -58,8 +59,8 @@ import kotlinx.serialization.json.jsonPrimitive
 
 class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClient,
     SearchClient, AlbumClient, ArtistClient, ArtistFollowClient, PlaylistClient, LyricsClient, ShareClient,
-    LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput, LibraryClient,
-    PlaylistEditClient, SaveToLibraryClient {
+    TrackerClient, LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
+    LibraryClient, PlaylistEditClient, SaveToLibraryClient {
 
     private val session = DeezerSession.getInstance()
     private val api = DeezerApi(session)
@@ -138,7 +139,9 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         session.settings = settings
     }
 
-    override suspend fun onExtensionSelected() {}
+    override suspend fun onExtensionSelected() {
+        session.settings?.let { setSettings(it) }
+    }
 
     //<============= HomeTab =============>
 
@@ -334,7 +337,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun getStreamableMedia(streamable: Streamable): Streamable.Media = deezerTrackClient.getStreamableMedia(streamable)
 
-    override suspend fun loadTrack(track: Track): Track = deezerTrackClient.loadTrack(track, quality, log)
+    override suspend fun loadTrack(track: Track): Track = deezerTrackClient.loadTrack(track, quality)
 
     override fun getShelves(track: Track): PagedData<Shelf> = getShelves(track.artists.first())
 
@@ -488,6 +491,22 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
             is EchoMediaItem.Lists.PlaylistItem -> "https://www.deezer.com/playlist/${item.id}"
             is EchoMediaItem.Lists.RadioItem -> TODO()
         }
+    }
+
+    //<============= Tracking =============>
+
+    override suspend fun onMarkAsPlayed(clientId: String, context: EchoMediaItem?, track: Track) {
+        return
+    }
+
+    override suspend fun onStartedPlaying(clientId: String, context: EchoMediaItem?, track: Track) {
+        if (log) {
+            api.log(track)
+        }
+    }
+
+    override suspend fun onStoppedPlaying(clientId: String, context: EchoMediaItem?, track: Track) {
+        return
     }
 
     //<============= Utils =============>

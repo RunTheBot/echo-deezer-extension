@@ -1,10 +1,11 @@
 package dev.brahmkshatriya.echo.extension.clients
 
 import dev.brahmkshatriya.echo.common.models.Streamable
-import dev.brahmkshatriya.echo.common.models.Streamable.Audio.Companion.toAudio
 import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toMedia
+import dev.brahmkshatriya.echo.common.models.Streamable.Source.Companion.toSource
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
+import dev.brahmkshatriya.echo.extension.DeezerExtension
 import dev.brahmkshatriya.echo.extension.DeezerParser
 import dev.brahmkshatriya.echo.extension.Utils
 import dev.brahmkshatriya.echo.extension.generateTrackUrl
@@ -24,15 +25,17 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
     private val client = OkHttpClient()
 
     suspend fun getStreamableMedia(streamable: Streamable): Streamable.Media {
+        DeezerExtension().handleArlExpiration()
         return if (streamable.quality == 1) {
-            streamable.id.toAudio().toMedia()
+            streamable.id.toSource().toMedia()
         } else {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             getByteStreamAudio(scope, streamable, client)
         }
     }
 
-    suspend fun loadTrack(track: Track, quality: String, log: Boolean): Track {
+    suspend fun loadTrack(track: Track, quality: String): Track {
+        DeezerExtension().handleArlExpiration()
         suspend fun fetchTrackData(track: Track): JsonObject {
             val trackObject = api.track(arrayOf(track))
             return trackObject["results"]!!.jsonObject["data"]!!.jsonArray[0].jsonObject
@@ -102,14 +105,10 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
             }
         }
 
-        if (log) {
-            api.log(newTrack)
-        }
-
         return newTrack.copy(
             isLiked = isTrackLiked(newTrack.id),
             streamables = listOf(
-                Streamable.audio(
+                Streamable.source(
                     id = url,
                     quality = 0,
                     title = newTrack.title,

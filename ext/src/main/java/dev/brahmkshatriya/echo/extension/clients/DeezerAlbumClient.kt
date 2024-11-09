@@ -4,6 +4,7 @@ import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
+import dev.brahmkshatriya.echo.extension.DeezerExtension
 import dev.brahmkshatriya.echo.extension.DeezerParser
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -11,6 +12,7 @@ import kotlinx.serialization.json.jsonObject
 class DeezerAlbumClient(private val api: DeezerApi, private val parser: DeezerParser) {
 
     suspend fun loadAlbum(album: Album): Album {
+        DeezerExtension().handleArlExpiration()
         if (album.extras["__TYPE__"] == "show") {
             val jsonObject = api.show(album)
             val resultsObject = jsonObject["results"]!!.jsonObject
@@ -23,6 +25,7 @@ class DeezerAlbumClient(private val api: DeezerApi, private val parser: DeezerPa
     }
 
     fun loadTracks(album: Album): PagedData<Track> = PagedData.Single {
+        DeezerExtension().handleArlExpiration()
         if (album.extras["__TYPE__"] == "show") {
             val jsonObject = api.show(album)
             val resultsObject = jsonObject["results"]!!.jsonObject

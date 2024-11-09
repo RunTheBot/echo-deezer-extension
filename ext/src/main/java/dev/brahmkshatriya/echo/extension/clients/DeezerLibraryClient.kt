@@ -82,8 +82,8 @@ class DeezerLibraryClient(private val api: DeezerApi, private val parser: Deezer
         val jsonObject = apiCall()
         val resultObject = jsonObject["results"]?.jsonObject ?: return emptyList()
         val dataArray = when {
-            resultObject["data"] != null -> resultObject["data"]!!.jsonArray
-            resultObject["TAB"] != null -> resultObject["TAB"]!!.jsonObject.values.firstOrNull()?.jsonObject?.get("data")?.jsonArray
+            resultObject["data"] != null -> resultObject["data"]?.jsonArray ?: emptyList()
+            resultObject["TAB"] != null -> resultObject["TAB"]?.jsonObject?.values?.firstOrNull()?.jsonObject?.get("data")?.jsonArray
             else -> null
         }
 

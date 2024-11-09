@@ -72,7 +72,7 @@ object Utils {
     }
 }
 
-suspend fun getByteChannel(
+fun getByteChannel(
     scope: CoroutineScope,
     streamable: Streamable,
     client: OkHttpClient,
@@ -181,13 +181,13 @@ suspend fun getByteChannel(
     return byteChannel
 }
 
-suspend fun getByteStreamAudio(
+fun getByteStreamAudio(
     scope: CoroutineScope,
     streamable: Streamable,
     client: OkHttpClient
 ): Streamable.Media {
     val contentLength = Utils.getContentLength(streamable.id, client)
-    return Streamable.Audio.Channel(
+    return Streamable.Source.Channel(
         channel = getByteChannel(scope, streamable, client, contentLength),
         totalBytes = contentLength
     ).toMedia()

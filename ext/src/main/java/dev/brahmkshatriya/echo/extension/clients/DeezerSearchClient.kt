@@ -23,6 +23,7 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
     private var oldSearch: Pair<String, List<Shelf>>? = null
 
     suspend fun quickSearch(query: String?): List<QuickSearch.QueryItem> {
+        DeezerExtension().handleArlExpiration()
         return if (query.isNullOrEmpty()) {
             val queryList = mutableListOf<QuickSearch.QueryItem>()
             val jsonObject = api.getSearchHistory()

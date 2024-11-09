@@ -5,6 +5,7 @@ import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.extension.DeezerApi
+import dev.brahmkshatriya.echo.extension.DeezerExtension
 import dev.brahmkshatriya.echo.extension.DeezerParser
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -14,6 +15,7 @@ import kotlinx.serialization.json.jsonPrimitive
 class DeezerArtistClient(private val api: DeezerApi, private val parser: DeezerParser) {
 
     fun getShelves(artist: Artist): PagedData.Single<Shelf> = PagedData.Single {
+        DeezerExtension().handleArlExpiration()
         try {
             val jsonObject = api.artist(artist.id)
             val resultsObject = jsonObject["results"]!!.jsonObject
@@ -76,6 +78,7 @@ class DeezerArtistClient(private val api: DeezerApi, private val parser: DeezerP
     }
 
     suspend fun loadArtist(artist: Artist): Artist {
+        DeezerExtension().handleArlExpiration()
         val jsonObject = api.artist(artist.id)
         val resultsObject =
             jsonObject["results"]?.jsonObject?.get("DATA")?.jsonObject ?: return artist
