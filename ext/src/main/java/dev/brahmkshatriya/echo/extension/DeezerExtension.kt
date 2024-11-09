@@ -119,16 +119,16 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
                         "Language",
                         "lang",
                         "Choose your preferred language for loaded stuff",
-                        DeezerCountries.languageEntryTitles,
-                        DeezerCountries.languageEntryValues,
+                        DeezerCountries.languages.map { it.name },
+                        DeezerCountries.languages.map { it.code },
                         getDefaultLanguageIndex(session.settings)
                     ),
                     SettingList(
                         "Country",
                         "country",
                         "Choose your preferred country for browse recommendations",
-                        DeezerCountries.countryEntryTitles,
-                        DeezerCountries.countryEntryValues,
+                        DeezerCountries.countries.map { it.name },
+                        DeezerCountries.countries.map { it.code },
                         getDefaultCountryIndex(session.settings)
                     )
                 )
