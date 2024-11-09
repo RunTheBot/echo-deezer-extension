@@ -12,7 +12,27 @@ This is an extension for the Extension based Music Player [Echo](https://github.
 
 ## Screenshots
 
-<div align="center"> <table> <tr> <td align="center"> <img src="https://github.com/user-attachments/assets/58df2ca3-0bce-4ed8-96c6-fc6efc2ee9c6" alt="Home Screen" width="250"/><br> 🎵 Home Screen<br> All your music essentials in one place. </td> <td align="center"> <img src="https://github.com/user-attachments/assets/684c0492-807f-4886-811d-0cdd9dd2d513" alt="Search & Discover" width="250"/><br> 🔍 Search & Discover<br> Find and explore music just like on Deezer. </td> <td align="center"> <img src="https://github.com/user-attachments/assets/63b55a3b-725d-4f7e-b28f-99a9bd873345" alt="Your Deezer Library" width="250"/><br> ❤️ Your Deezer Library<br> Access and manage your favorite tracks within Echo. </td> </tr> </table> </div>
+<div align="center" style="text-align: center;">
+  <table>
+    <tr>
+      <td align="center" width="260px">
+        <img src="https://github.com/user-attachments/assets/58df2ca3-0bce-4ed8-96c6-fc6efc2ee9c6" alt="Home Screen" width="250"/><br>
+        🎵 Home Screen<br>
+        <span>All your music essentials in one place.</span>
+      </td>
+      <td align="center" width="260px">
+        <img src="https://github.com/user-attachments/assets/684c0492-807f-4886-811d-0cdd9dd2d513" alt="Search & Discover" width="250"/><br>
+        🔍 Search & Discover<br>
+        <span>Find and explore music just like on Deezer.</span>
+      </td>
+      <td align="center" width="260px">
+        <img src="https://github.com/user-attachments/assets/63b55a3b-725d-4f7e-b28f-99a9bd873345" alt="Your Deezer Library" width="250"/><br>
+        ❤️ Your Deezer Library<br>
+        <span>Access and manage your favorite tracks within Echo.</span>
+      </td>
+    </tr>
+  </table>
+</div>
 
 ## Installation
 
