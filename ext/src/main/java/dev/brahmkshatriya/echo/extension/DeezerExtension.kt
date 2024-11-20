@@ -23,7 +23,7 @@ import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.common.models.Playlist
-import dev.brahmkshatriya.echo.common.models.QuickSearch
+import dev.brahmkshatriya.echo.common.models.QuickSearchItem
 import dev.brahmkshatriya.echo.common.models.Radio
 import dev.brahmkshatriya.echo.common.models.Request.Companion.toRequest
 import dev.brahmkshatriya.echo.common.models.Shelf
@@ -306,13 +306,13 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     private val deezerSearchClient = DeezerSearchClient(api, history, parser)
 
-    override suspend fun quickSearch(query: String?): List<QuickSearch.QueryItem> = deezerSearchClient.quickSearch(query)
+    override suspend fun quickSearch(query: String?): List<QuickSearchItem.Query> = deezerSearchClient.quickSearch(query)
 
     override fun searchFeed(query: String?, tab: Tab?): PagedData.Single<Shelf> = deezerSearchClient.searchFeed(query, tab)
 
     override suspend fun searchTabs(query: String?): List<Tab> = deezerSearchClient.searchTabs(query)
 
-    override suspend fun deleteSearchHistory(query: QuickSearch.QueryItem) {
+    override suspend fun deleteQuickSearch(item: QuickSearchItem) {
         api.deleteSearchHistory()
     }
 
@@ -363,7 +363,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     private val deezerLyricsClient = DeezerLyricsClient(api)
 
-    override suspend fun loadLyrics(small: Lyrics): Lyrics = small
+    override suspend fun loadLyrics(lyrics: Lyrics): Lyrics = lyrics
 
     override fun searchTrackLyrics(clientId: String, track: Track): PagedData.Single<Lyrics> = deezerLyricsClient.searchTrackLyrics(track)
 

@@ -1,7 +1,7 @@
 package dev.brahmkshatriya.echo.extension.clients
 
 import dev.brahmkshatriya.echo.common.helpers.PagedData
-import dev.brahmkshatriya.echo.common.models.QuickSearch
+import dev.brahmkshatriya.echo.common.models.QuickSearchItem
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.extension.DeezerApi
@@ -22,24 +22,24 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
     @Volatile
     private var oldSearch: Pair<String, List<Shelf>>? = null
 
-    suspend fun quickSearch(query: String?): List<QuickSearch.QueryItem> {
+    suspend fun quickSearch(query: String?): List<QuickSearchItem.Query> {
         DeezerExtension().handleArlExpiration()
         return if (query.isNullOrEmpty()) {
-            val queryList = mutableListOf<QuickSearch.QueryItem>()
+            val queryList = mutableListOf<QuickSearchItem.Query>()
             val jsonObject = api.getSearchHistory()
             val resultObject = jsonObject["results"]!!.jsonObject
             val searchObject = resultObject["SEARCH_HISTORY"]?.jsonObject
             val dataArray = searchObject?.get("data")?.jsonArray
             val historyList = dataArray?.mapNotNull { item ->
                 val queryItem = item.jsonObject["query"]?.jsonPrimitive?.content
-                queryItem?.let { QuickSearch.QueryItem(it, true) }
+                queryItem?.let { QuickSearchItem.Query(it, true) }
             } ?: emptyList()
             queryList.addAll(historyList)
             val trendingObject = resultObject["TRENDING_QUERIES"]?.jsonObject
             val dataTrendingArray = trendingObject?.get("data")?.jsonArray
             val trendingList = dataTrendingArray?.mapNotNull { item ->
                 val queryItem = item.jsonObject["QUERY"]?.jsonPrimitive?.content
-                queryItem?.let { QuickSearch.QueryItem(it, false) }
+                queryItem?.let { QuickSearchItem.Query(it, false) }
             } ?: emptyList()
             queryList.addAll(trendingList)
             queryList
@@ -50,7 +50,7 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
                 val suggestionArray = resultObject?.get("SUGGESTION")?.jsonArray
                 suggestionArray?.mapNotNull { item ->
                     val queryItem = item.jsonObject["QUERY"]?.jsonPrimitive?.content
-                    queryItem?.let { QuickSearch.QueryItem(it, false) }
+                    queryItem?.let { QuickSearchItem.Query(it, false) }
                 } ?: emptyList()
             }.getOrElse {
                 emptyList()
