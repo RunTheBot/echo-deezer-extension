@@ -4,15 +4,12 @@ import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toMedia
 import dev.brahmkshatriya.echo.common.models.Streamable.Source.Companion.toSource
 import dev.brahmkshatriya.echo.common.models.Track
+import dev.brahmkshatriya.echo.extension.AudioStreamManager
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import dev.brahmkshatriya.echo.extension.DeezerExtension
 import dev.brahmkshatriya.echo.extension.DeezerParser
 import dev.brahmkshatriya.echo.extension.Utils
 import dev.brahmkshatriya.echo.extension.generateTrackUrl
-import dev.brahmkshatriya.echo.extension.getByteStreamAudio
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -29,8 +26,10 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
         return if (streamable.quality == 1) {
             streamable.id.toSource().toMedia()
         } else {
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-            getByteStreamAudio(scope, streamable, client)
+            val audioStreamManger = AudioStreamManager
+            audioStreamManger.stopServer()
+            audioStreamManger.startServer(streamable)
+            audioStreamManger.getStreamUrl().toSource().toMedia()
         }
     }
 
