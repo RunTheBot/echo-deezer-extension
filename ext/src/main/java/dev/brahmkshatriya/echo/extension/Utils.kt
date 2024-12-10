@@ -1,20 +1,8 @@
 package dev.brahmkshatriya.echo.extension
 
-import dev.brahmkshatriya.echo.common.models.Streamable
-import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toMedia
-import io.ktor.utils.io.ByteChannel
-import io.ktor.utils.io.writeFully
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import okhttp3.ConnectionPool
-import okhttp3.OkHttpClient
-import okhttp3.Protocol
-import okhttp3.Request
 import java.io.ByteArrayOutputStream
-import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -63,134 +51,6 @@ object Utils {
         }
         return cipher.doFinal(chunk)
     }
-
-    fun getContentLength(url: String, client: OkHttpClient): Long {
-        val request = Request.Builder().url(url).head().build()
-        client.newCall(request).execute().use { response ->
-            return response.header("Content-Length")?.toLong() ?: 0L
-        }
-    }
-}
-
-fun getByteChannel(
-    scope: CoroutineScope,
-    streamable: Streamable,
-    client: OkHttpClient,
-    contentLength: Long
-): ByteChannel {
-    val url = streamable.id
-    val key = streamable.extra["key"] ?: ""
-
-    val byteChannel = ByteChannel(true)
-    var lastActivityTime = System.currentTimeMillis()
-
-    scope.launch {
-        val clientWithTimeouts = client.newBuilder()
-            .readTimeout(0, TimeUnit.SECONDS)
-            .connectTimeout(0, TimeUnit.SECONDS)
-            .writeTimeout(0, TimeUnit.SECONDS)
-            .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
-            .protocols(listOf(Protocol.HTTP_1_1))
-            .retryOnConnectionFailure(true)
-            .build()
-
-        var totalBytesRead = 0L
-        var counter = 0
-
-        while (totalBytesRead < contentLength && !byteChannel.isClosedForWrite) {
-            val requestBuilder = Request.Builder().url(url)
-
-            if (totalBytesRead > 0) {
-                requestBuilder.header("Range", "bytes=$totalBytesRead-")
-            }
-
-            val request = requestBuilder.build()
-
-            val response = clientWithTimeouts.newCall(request).execute()
-
-            response.body.byteStream().use { byteStream ->
-                var shouldReopen = false
-
-                while (totalBytesRead < contentLength && !shouldReopen) {
-                    if (System.currentTimeMillis() - lastActivityTime > 300_000L) {
-                        shouldReopen = true
-                        break
-                    }
-
-                    val buffer = ByteArray(2048)
-                    var bytesRead: Int
-                    var totalRead = 0
-
-                    try {
-                        while (totalRead < buffer.size) {
-                            bytesRead = byteStream.read(buffer, totalRead, buffer.size - totalRead)
-                            if (bytesRead == -1) {
-                                shouldReopen = true
-                                break
-                            }
-                            totalRead += bytesRead
-
-                            lastActivityTime = System.currentTimeMillis()
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        shouldReopen = true
-                        break
-                    }
-
-                    if (totalRead == 0) {
-                        shouldReopen = true
-                        break
-                    }
-
-                    try {
-                        if (System.currentTimeMillis() - lastActivityTime > 300_000L) {
-                            shouldReopen = true
-                            break
-                        }
-
-                        if (totalRead != 2048) {
-                            byteChannel.writeFully(buffer, 0, totalRead)
-                        } else {
-                            if ((counter % 3) == 0) {
-                                val decryptedChunk = Utils.decryptBlowfish(buffer, key)
-                                byteChannel.writeFully(decryptedChunk, 0, totalRead)
-                            } else {
-                                byteChannel.writeFully(buffer, 0, totalRead)
-                            }
-                        }
-
-                        lastActivityTime = System.currentTimeMillis()
-                    } catch (e: IOException) {
-                        e.printStackTrace()
-                        println("Exception occurred while writing to channel: ${e.message}")
-                        shouldReopen = true
-                        break
-                    }
-                    totalBytesRead += totalRead
-                    counter++
-                }
-
-                if (!shouldReopen) {
-                    response.close()
-                }
-            }
-        }
-    }
-
-    return byteChannel
-}
-
-fun getByteStreamAudio(
-    scope: CoroutineScope,
-    streamable: Streamable,
-    client: OkHttpClient
-): Streamable.Media {
-    val contentLength = Utils.getContentLength(streamable.id, client)
-    return Streamable.Source.Channel(
-        channel = getByteChannel(scope, streamable, client, contentLength),
-        totalBytes = contentLength
-    ).toMedia()
 }
 
 @Suppress("NewApi", "GetInstance")
