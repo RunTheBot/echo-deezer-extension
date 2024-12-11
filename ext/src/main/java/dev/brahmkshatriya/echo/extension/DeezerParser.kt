@@ -131,7 +131,7 @@ class DeezerParser(private val session: DeezerSession) {
             cover = getCover(md5, "talk", false),
             duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
             streamables = listOf(
-                Streamable.source(
+                Streamable.server(
                     id = data["EPISODE_DIRECT_STREAM_URL"]?.jsonPrimitive?.content.orEmpty(),
                     title = title,
                     quality = 1

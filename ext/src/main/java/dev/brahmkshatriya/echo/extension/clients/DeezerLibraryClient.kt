@@ -53,7 +53,7 @@ class DeezerLibraryClient(private val api: DeezerApi, private val parser: Deezer
                         else -> return@async null
                     }
                     parser.run {
-                        dataArray?.toShelfItemsList(tab.name)
+                        dataArray?.toShelfItemsList(tab.title)
                     }
                 }
             }.awaitAll().filterNotNull()

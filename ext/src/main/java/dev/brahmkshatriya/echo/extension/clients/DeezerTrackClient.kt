@@ -21,7 +21,7 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
 
     private val client = OkHttpClient()
 
-    suspend fun getStreamableMedia(streamable: Streamable): Streamable.Media {
+    suspend fun loadStreamableMedia(streamable: Streamable): Streamable.Media {
         DeezerExtension().handleArlExpiration()
         return if (streamable.quality == 1) {
             streamable.id.toSource().toMedia()
@@ -107,11 +107,11 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
         return newTrack.copy(
             isLiked = isTrackLiked(newTrack.id),
             streamables = listOf(
-                Streamable.source(
+                Streamable.server(
                     id = url,
                     quality = 0,
                     title = newTrack.title,
-                    extra = mapOf("key" to key)
+                    extras = mapOf("key" to key)
                 )
             )
         )

@@ -156,7 +156,7 @@ object AudioStreamManager {
         synchronized(lock) {
             server?.stop()
 
-            val key = streamable.extra["key"] ?: ""
+            val key = streamable.extras["key"] ?: ""
 
             server = LocalAudioWebServer(HOSTNAME, PORT, streamable, key).apply {
                 start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
