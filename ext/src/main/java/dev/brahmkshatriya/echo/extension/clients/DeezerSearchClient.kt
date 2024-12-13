@@ -22,9 +22,9 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
     @Volatile
     private var oldSearch: Pair<String, List<Shelf>>? = null
 
-    suspend fun quickSearch(query: String?): List<QuickSearchItem.Query> {
+    suspend fun quickSearch(query: String): List<QuickSearchItem.Query> {
         DeezerExtension().handleArlExpiration()
-        return if (query.isNullOrEmpty()) {
+        return if (query.isBlank()) {
             val queryList = mutableListOf<QuickSearchItem.Query>()
             val jsonObject = api.getSearchHistory()
             val resultObject = jsonObject["results"]!!.jsonObject
@@ -58,9 +58,9 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
         }
     }
 
-    fun searchFeed(query: String?, tab: Tab?): PagedData.Single<Shelf> = PagedData.Single {
+    fun searchFeed(query: String, tab: Tab?): PagedData.Single<Shelf> = PagedData.Single {
         DeezerExtension().handleArlExpiration()
-        query ?: return@Single browseFeed()
+        query.ifBlank { return@Single browseFeed() }
 
         if (history) {
             api.setSearchHistory(query)
@@ -118,9 +118,9 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
         }
     }
 
-    suspend fun searchTabs(query: String?): List<Tab> {
+    suspend fun searchTabs(query: String): List<Tab> {
         DeezerExtension().handleArlExpiration()
-        query ?: return emptyList()
+        query.ifBlank { return emptyList() }
 
         val jsonObject = api.search(query)
         val resultObject = jsonObject["results"]?.jsonObject
