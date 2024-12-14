@@ -30,6 +30,7 @@ import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.common.models.Track
+import dev.brahmkshatriya.echo.common.models.TrackDetails
 import dev.brahmkshatriya.echo.common.models.User
 import dev.brahmkshatriya.echo.common.settings.Setting
 import dev.brahmkshatriya.echo.common.settings.SettingCategory
@@ -322,7 +323,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     private val deezerTrackClient = DeezerTrackClient(api, parser)
 
-    override suspend fun loadStreamableMedia(streamable: Streamable): Streamable.Media = deezerTrackClient.loadStreamableMedia(streamable)
+    override suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media = deezerTrackClient.loadStreamableMedia(streamable, isDownload)
 
     override suspend fun loadTrack(track: Track): Track = deezerTrackClient.loadTrack(track, quality)
 
@@ -476,18 +477,14 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Tracking =============>
 
-    override suspend fun onMarkAsPlayed(extensionId: String, context: EchoMediaItem?, track: Track) {
-        return
-    }
+    override suspend fun onMarkAsPlayed(details: TrackDetails) {}
 
-    override suspend fun onStartedPlaying(extensionId: String, context: EchoMediaItem?, track: Track) {
-        if (log) {
-            api.log(track)
+    override suspend fun onTrackChanged(details: TrackDetails?) {
+        if (details != null) {
+            if (log) {
+                api.log(details.track)
+            }
         }
-    }
-
-    override suspend fun onStoppedPlaying(extensionId: String, context: EchoMediaItem?, track: Track) {
-        return
     }
 
     //<============= Utils =============>
