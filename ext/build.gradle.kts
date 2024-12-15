@@ -20,7 +20,6 @@ kotlin {
 dependencies {
     val libVersion: String by project
     compileOnly("com.github.brahmkshatriya:echo:$libVersion")
-    compileOnly("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
 
     implementation("org.nanohttpd:nanohttpd:2.3.1")
 }

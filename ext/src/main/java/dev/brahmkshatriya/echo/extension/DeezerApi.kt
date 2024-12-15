@@ -1,5 +1,6 @@
 package dev.brahmkshatriya.echo.extension
 
+import dev.brahmkshatriya.echo.common.helpers.ContinuationCallback.Companion.await
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.models.Playlist
@@ -150,6 +151,8 @@ class DeezerApi(private val session: DeezerSession) {
             add("Content-Language", language)
             add("Content-Type", "application/json; charset=utf-8")
             add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+            add("X-User-IP", "1.1.1.1")
+            add("x-deezer-client-ip", "1.1.1.1")
             if (method != "user.getArl") {
                 add("Cookie", "arl=$arl; sid=$sid")
             } else {
@@ -188,7 +191,7 @@ class DeezerApi(private val session: DeezerSession) {
             }
             .build()
 
-        val response = client.newCall(request).execute()
+        val response = client.newCall(request).await()
         val responseBody = response.body.string()
 
         if (!response.isSuccessful) {
@@ -281,7 +284,7 @@ class DeezerApi(private val session: DeezerSession) {
         return BigInteger(1, digest).toString(16).padStart(32, '0')
     }
 
-    private fun getToken(params: Map<String, String>, sid: String): String {
+    private suspend fun getToken(params: Map<String, String>, sid: String): String {
         val url = "https://connect.deezer.com/oauth/user_auth.php"
         val httpUrl = url.toHttpUrlOrNull()!!.newBuilder().apply {
             params.forEach { (key, value) -> addQueryParameter(key, value) }
@@ -298,20 +301,19 @@ class DeezerApi(private val session: DeezerSession) {
             )
             .build()
 
-        clientLog.newCall(request).execute().use { response ->
+        clientLog.newCall(request).await().use { response ->
             if (!response.isSuccessful) throw Exception("Unexpected code $response")
             return response.body.string()
         }
     }
 
-    fun getSid() {
-        val url = "https://www.deezer.com/"
+    suspend fun getSid() {
+        val url = "https://www.deezer.com/ajax/gw-light.php?method=user.getArl&input=3&api_version=1.0&api_token=null"
         val request = Request.Builder()
             .url(url)
             .get()
             .build()
-
-        val response = clientLog.newCall(request).execute()
+        val response = clientLog.newCall(request).await()
         response.headers.forEach {
             if (it.second.startsWith("sid=")) {
                 session.updateCredentials(sid = it.second.substringAfter("sid=").substringBefore(";"))
