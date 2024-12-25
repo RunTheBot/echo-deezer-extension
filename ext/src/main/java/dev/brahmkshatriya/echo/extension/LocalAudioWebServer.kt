@@ -3,6 +3,7 @@ package dev.brahmkshatriya.echo.extension
 import dev.brahmkshatriya.echo.common.models.Streamable
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoHTTPD.MIME_PLAINTEXT
+import fi.iki.elonen.NanoHTTPD.SOCKET_READ_TIMEOUT
 import fi.iki.elonen.NanoHTTPD.newFixedLengthResponse
 import kotlinx.io.IOException
 import java.io.BufferedInputStream
@@ -12,10 +13,15 @@ import javax.net.ssl.HttpsURLConnection
 
 class LocalAudioWebServer(
     hostname: String,
-    port: Int,
-    private val streamable: Streamable,
-    private val key: String
+    port: Int
 ) : NanoHTTPD(hostname, port) {
+
+    private val trackMap = mutableMapOf<String, Pair<Streamable, String>>()
+
+    fun addOrUpdateTrack(streamable: Streamable) {
+        val key = streamable.extras["key"] ?: ""
+        trackMap[streamable.id] = streamable to key
+    }
 
     override fun serve(session: IHTTPSession): Response {
         if (session.method != Method.GET) {
@@ -25,6 +31,22 @@ class LocalAudioWebServer(
         if (session.uri != "/stream") {
             return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
         }
+
+        val trackId = session.parms["trackId"]
+        if (trackId.isNullOrBlank()) {
+            return newFixedLengthResponse(
+                Response.Status.BAD_REQUEST,
+                MIME_PLAINTEXT,
+                "Missing trackId parameter!"
+            )
+        }
+
+        val (streamable, key) = trackMap[trackId]
+            ?: return newFixedLengthResponse(
+                Response.Status.NOT_FOUND,
+                MIME_PLAINTEXT,
+                "Track not found!"
+            )
 
         val rangeHeader = session.headers["range"]
         var startBytes = 0L
@@ -40,10 +62,7 @@ class LocalAudioWebServer(
             }
         }
 
-
-        val outResponse = deezerStream(streamable.id, startBytes, endBytes, isRanged, key)
-
-        return outResponse
+        return deezerStream(streamable.id, startBytes, endBytes, isRanged, key)
     }
 }
 
@@ -150,17 +169,20 @@ object AudioStreamManager {
     private const val HOSTNAME = "127.0.0.1"
     private const val PORT = 36958
 
-    fun startServer(
-        streamable: Streamable,
-    ) {
+    private fun startServerIfNeeded() {
         synchronized(lock) {
-            server?.stop()
-
-            val key = streamable.extras["key"] ?: ""
-
-            server = LocalAudioWebServer(HOSTNAME, PORT, streamable, key).apply {
-                start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
+            if (server == null) {
+                server = LocalAudioWebServer(HOSTNAME, PORT).apply {
+                    start(SOCKET_READ_TIMEOUT, false)
+                }
             }
+        }
+    }
+
+    fun addTrack(streamable: Streamable) {
+        synchronized(lock) {
+            startServerIfNeeded()
+            server?.addOrUpdateTrack(streamable)
         }
     }
 
@@ -172,7 +194,8 @@ object AudioStreamManager {
         }
     }
 
-    fun getStreamUrl(): String {
-        return "http://$HOSTNAME:$PORT/stream"
+    fun getStreamUrlForTrack(trackId: String): String {
+        return "http://$HOSTNAME:$PORT/stream?trackId=$trackId"
     }
 }
+

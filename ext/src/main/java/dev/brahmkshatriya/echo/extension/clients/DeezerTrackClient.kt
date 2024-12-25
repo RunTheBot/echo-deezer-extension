@@ -35,9 +35,8 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
                 getByteStreamAudio(scope, streamable, client)
             } else {
                 val audioStreamManger = AudioStreamManager
-                audioStreamManger.stopServer()
-                audioStreamManger.startServer(streamable)
-                audioStreamManger.getStreamUrl().toSource().toMedia()
+                audioStreamManger.addTrack(streamable)
+                audioStreamManger.getStreamUrlForTrack(streamable.id).toSource().toMedia()
             }
         }
     }
