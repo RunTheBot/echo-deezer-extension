@@ -167,13 +167,24 @@ object AudioStreamManager {
     private var server: LocalAudioWebServer? = null
     private val lock = Any()
     private const val HOSTNAME = "127.0.0.1"
-    private const val PORT = 36958
+
+    @Volatile
+    private var usedPort = -1
 
     private fun startServerIfNeeded() {
         synchronized(lock) {
             if (server == null) {
-                server = LocalAudioWebServer(HOSTNAME, PORT).apply {
-                    start(SOCKET_READ_TIMEOUT, false)
+                try {
+                    server = LocalAudioWebServer(HOSTNAME, 0).apply {
+                        start(SOCKET_READ_TIMEOUT, false)
+                    }
+                    usedPort = server?.listeningPort ?: -1
+
+                    println("LocalAudioWebServer started on port: $usedPort")
+                } catch (e: Exception) {
+                    println("Failed to start LocalAudioWebServer: ${e.message}")
+                    e.printStackTrace()
+                    server = null
                 }
             }
         }
@@ -195,7 +206,7 @@ object AudioStreamManager {
     }
 
     fun getStreamUrlForTrack(trackId: String): String {
-        return "http://$HOSTNAME:$PORT/stream?trackId=$trackId"
+        return "http://$HOSTNAME:$usedPort/stream?trackId=$trackId"
     }
 }
 

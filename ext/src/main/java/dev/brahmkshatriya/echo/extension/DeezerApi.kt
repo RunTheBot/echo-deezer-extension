@@ -136,9 +136,9 @@ class DeezerApi(private val session: DeezerSession) {
         }
     }
 
-    private val client: OkHttpClient get() = createOkHttpClient(useProxy = true)
-    private val clientLog: OkHttpClient get() = createOkHttpClient(useProxy = true , true)
-    private val clientNP: OkHttpClient get() = createOkHttpClient(useProxy = false)
+    private val client: OkHttpClient  by lazy { createOkHttpClient(useProxy = true) }
+    private val clientLog: OkHttpClient by lazy { createOkHttpClient(useProxy = true , true) }
+    private val clientNP: OkHttpClient by lazy { createOkHttpClient(useProxy = false) }
 
     private fun getHeaders(method: String? = ""): Headers {
         return Headers.Builder().apply {
@@ -161,7 +161,11 @@ class DeezerApi(private val session: DeezerSession) {
         }.build()
     }
 
-    suspend fun callApi(method: String, params: JsonObject = buildJsonObject { }, gatewayInput: String? = ""): String = withContext(Dispatchers.IO) {
+    suspend fun callApi(
+        method: String,
+        params: JsonObject = buildJsonObject { },
+        gatewayInput: String? = ""
+    ): String = withContext(Dispatchers.IO) {
         val url = HttpUrl.Builder()
             .scheme("https")
             .host("www.deezer.com")
@@ -191,34 +195,32 @@ class DeezerApi(private val session: DeezerSession) {
             }
             .build()
 
-        val response = client.newCall(request).await()
-        val responseBody = response.body.string()
+        client.newCall(request).await().use { response ->
+            val responseBody = response.body.string()
+            if (!response.isSuccessful) throw Exception("API call failed with status ${response.code}: $responseBody")
 
-        if (!response.isSuccessful) {
-            throw Exception("API call failed with status code ${response.code}: $responseBody")
-        }
-
-        if (method == "deezer.getUserData") {
-            response.headers.forEach {
-                if (it.second.startsWith("sid=")) {
-                    session.updateCredentials(sid = it.second.substringAfter("sid=").substringBefore(";"))
+            if (method == "deezer.getUserData") {
+                response.headers.forEach {
+                    if (it.second.startsWith("sid=")) {
+                        session.updateCredentials(sid = it.second.substringAfter("sid=").substringBefore(";"))
+                    }
                 }
             }
-        }
 
-        if (responseBody.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"")) {
-            if (email.isEmpty() && pass.isEmpty()) {
-                session.isArlExpired(true)
-                throw Exception("Please re-login (Best use User + Pass method)")
-            } else {
-                session.isArlExpired(false)
-                val userList = DeezerExtension().onLogin(email, pass)
-                DeezerExtension().onSetLoginUser(userList.first())
-                return@withContext callApi(method, params, gatewayInput)
+            if (responseBody.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"")) {
+                if (email.isEmpty() && pass.isEmpty()) {
+                    session.isArlExpired(true)
+                    throw Exception("Please re-login (Best use User + Pass method)")
+                } else {
+                    session.isArlExpired(false)
+                    val userList = DeezerExtension().onLogin(email, pass)
+                    DeezerExtension().onSetLoginUser(userList.first())
+                    return@withContext callApi(method, params, gatewayInput)
+                }
             }
-        }
 
-        responseBody
+            responseBody
+        }
     }
 
     //<============= Login =============>
@@ -253,29 +255,33 @@ class DeezerApi(private val session: DeezerSession) {
     }
 
     suspend fun getArlByEmail(mail: String, password: String) {
-        // Get SID
-        getSid()
+        try {
+            // Get SID
+            getSid()
 
-        val clientId = "447462"
-        val clientSecret = "a83bf7f38ad2f137e444727cfc3775cf"
-        val md5Password = md5(password)
+            val clientId = "447462"
+            val clientSecret = "a83bf7f38ad2f137e444727cfc3775cf"
+            val md5Password = md5(password)
 
-        val params = mapOf(
-            "app_id" to clientId,
-            "login" to mail,
-            "password" to md5Password,
-            "hash" to md5(clientId + mail + md5Password + clientSecret)
-        )
+            val params = mapOf(
+                "app_id" to clientId,
+                "login" to mail,
+                "password" to md5Password,
+                "hash" to md5(clientId + mail + md5Password + clientSecret)
+            )
 
-        // Get access token
-        val responseJson = getToken(params, sid)
-        val apiResponse = json.decodeFromString<JsonObject>(responseJson)
-        session.updateCredentials(token = apiResponse.jsonObject["access_token"]!!.jsonPrimitive.content)
+            // Get access token
+            val responseJson = getToken(params, sid)
+            val apiResponse = json.decodeFromString<JsonObject>(responseJson)
+            session.updateCredentials(token = apiResponse.jsonObject["access_token"]!!.jsonPrimitive.content)
 
-        // Get ARL
-        val arlResponse = callApi("user.getArl")
-        val arlObject = json.decodeFromString<JsonObject>(arlResponse)
-        session.updateCredentials(arl = arlObject["results"]!!.jsonPrimitive.content)
+            // Get ARL
+            val arlResponse = callApi("user.getArl")
+            val arlObject = json.decodeFromString<JsonObject>(arlResponse)
+            session.updateCredentials(arl = arlObject["results"]!!.jsonPrimitive.content)
+        } catch (e: Exception) {
+            getArlByEmail(mail, password)
+        }
     }
 
     private fun md5(input: String): String {

@@ -97,19 +97,17 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
         return browseSections.mapNotNull { section ->
             val id = section.jsonObject["module_id"]!!.jsonPrimitive.content
             when (id) {
-                "67aa1c1b-7873-488d-88a0-55b6596cf4d6", "486313b7-e3c7-453d-ba79-27dc6bea20ce",
-                "1d8dfed4-582f-40e1-b29c-760b44c0301e", "ecb89e7c-1c07-4922-aa50-d29745576636",
-                "64ac680b-7c84-49a3-9077-38e9b653332e" -> {
-                    parser.run {
-                        section.toShelfItemsList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty())
-                    }
-                }
-
                 "8b2c6465-874d-4752-a978-1637ca0227b5" -> {
                     parser.run {
                         section.toShelfCategoryList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty()) { target ->
                             DeezerExtension().channelFeed(target)
                         }
+                    }
+                }
+
+                !in "6550abfd-15e4-47de-a5e8-a60e27fa152a", !in "c8b406d4-5293-4f59-a0f4-562eba496a0b" -> {
+                    parser.run {
+                        section.toShelfItemsList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty())
                     }
                 }
 

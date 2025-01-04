@@ -21,39 +21,32 @@ import javax.crypto.spec.SecretKeySpec
 
 object Utils {
     private const val SECRET = "g4el58wc0zvf9na1"
-    private val secretIvSpec = IvParameterSpec(byteArrayOf(0,1,2,3,4,5,6,7))
-
+    private val secretIvSpec = IvParameterSpec(ByteArray(8) { it.toByte() })
     private val keySpecCache = ConcurrentHashMap<String, SecretKeySpec>()
 
-    private fun bitwiseXor(firstVal: Char, secondVal: Char, thirdVal: Char): Char {
-        return (firstVal.code xor secondVal.code xor thirdVal.code).toChar()
+    private val md5Digest: MessageDigest by lazy { MessageDigest.getInstance("MD5") }
+
+    private fun bitwiseXor(vararg values: Char): Char {
+        return values.fold(0) { acc, char -> acc xor char.code }.toChar()
     }
 
     fun createBlowfishKey(trackId: String): String {
         val trackMd5Hex = trackId.toMD5()
-        val blowfishKey = StringBuilder()
-
-        for (i in 0..15) {
-            val nextChar = bitwiseXor(trackMd5Hex[i], trackMd5Hex[i + 16], SECRET[i])
-            blowfishKey.append(nextChar)
+        return buildString {
+            for (i in 0 until 16) {
+                append(bitwiseXor(trackMd5Hex[i], trackMd5Hex[i + 16], SECRET[i]))
+            }
         }
-
-        return blowfishKey.toString()
     }
 
     private fun getSecretKeySpec(blowfishKey: String): SecretKeySpec {
         return keySpecCache.computeIfAbsent(blowfishKey) {
-            SecretKeySpec(blowfishKey.toByteArray(), "Blowfish")
+            SecretKeySpec(blowfishKey.toByteArray(Charsets.ISO_8859_1), "Blowfish")
         }
     }
 
-    private fun bytesToHex(bytes: ByteArray): String {
-        return bytes.joinToString("") { String.format("%02X", it) }
-    }
-
     private fun String.toMD5(): String {
-        val bytes = MessageDigest.getInstance("MD5").digest(this.toByteArray(Charsets.ISO_8859_1))
-        return bytesToHex(bytes).lowercase()
+        return md5Digest.digest(toByteArray(Charsets.ISO_8859_1)).joinToString("") { "%02x".format(it) }
     }
 
     fun decryptBlowfish(chunk: ByteArray, blowfishKey: String): ByteArray {
