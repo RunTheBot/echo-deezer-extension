@@ -4,10 +4,10 @@ import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toMedia
 import dev.brahmkshatriya.echo.common.models.Streamable.Source.Companion.toSource
 import dev.brahmkshatriya.echo.common.models.Track
-import dev.brahmkshatriya.echo.extension.AudioStreamManager
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import dev.brahmkshatriya.echo.extension.DeezerExtension
 import dev.brahmkshatriya.echo.extension.DeezerParser
+import dev.brahmkshatriya.echo.extension.LocalAudioServer
 import dev.brahmkshatriya.echo.extension.Utils
 import dev.brahmkshatriya.echo.extension.generateTrackUrl
 import dev.brahmkshatriya.echo.extension.getByteStreamAudio
@@ -30,13 +30,13 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
         return if (streamable.quality == 1) {
             streamable.id.toSource().toMedia()
         } else {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             if(isDownload) {
-                val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
                 getByteStreamAudio(scope, streamable, client)
             } else {
-                val audioStreamManger = AudioStreamManager
-                audioStreamManger.addTrack(streamable)
-                audioStreamManger.getStreamUrlForTrack(streamable.id).toSource().toMedia()
+                val localAudioServer = LocalAudioServer
+                localAudioServer.addTrack(streamable, scope)
+                localAudioServer.getStreamUrlForTrack(streamable.id, scope).toSource().toMedia()
             }
         }
     }

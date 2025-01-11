@@ -20,8 +20,6 @@ kotlin {
 dependencies {
     val libVersion: String by project
     compileOnly("com.github.brahmkshatriya:echo:$libVersion")
-
-    implementation("org.nanohttpd:nanohttpd:2.3.1")
 }
 
 val extType: String by project
