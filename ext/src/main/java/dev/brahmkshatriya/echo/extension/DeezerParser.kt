@@ -3,6 +3,7 @@ package dev.brahmkshatriya.echo.extension
 import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
+import dev.brahmkshatriya.echo.common.models.Date.Companion.toDate
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.ImageHolder
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
@@ -197,7 +198,7 @@ class DeezerParser(private val session: DeezerSession) {
             cover = getCover(md5, "cover", loaded),
             duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
             releaseDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toLongOrNull()?.let {
-                Date.from(Instant.ofEpochSecond(it)).toString()
+                Instant.ofEpochSecond(it).epochSecond.toInt().toDate()
             },
             artists = listOfNotNull(
                 Artist(
@@ -216,6 +217,7 @@ class DeezerParser(private val session: DeezerSession) {
         )
     }
 
+    @Suppress("NewApi")
     fun JsonObject.toPlaylist(loaded: Boolean = false): Playlist {
         val data = this["data"]?.jsonObject ?: this["DATA"]?.jsonObject ?: this
         val type = data["PICTURE_TYPE"]?.jsonPrimitive?.content.orEmpty()
@@ -228,7 +230,7 @@ class DeezerParser(private val session: DeezerSession) {
             subtitle = this["subtitle"]?.jsonPrimitive?.content.orEmpty(),
             isEditable = data["PARENT_USER_ID"]?.jsonPrimitive?.content == session.credentials?.userId,
             tracks = data["NB_SONG"]?.jsonPrimitive?.int ?: 0,
-            creationDate = data["DATE_ADD"]?.jsonPrimitive?.content,
+            creationDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toIntOrNull()?.toDate(),
         )
     }
 
