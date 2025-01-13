@@ -30,33 +30,38 @@ class DeezerLibraryClient(private val api: DeezerApi, private val parser: Deezer
             Tab("shows", "Podcasts")
         )
 
-        allTabs = "all" to coroutineScope {
-            tabs.map { tab ->
-                async(Dispatchers.IO) {
-                    val jsonObject = when (tab.id) {
-                        "playlists" -> api.getPlaylists()
-                        "albums" -> api.getAlbums()
-                        "tracks" -> api.getTracks()
-                        "artists" -> api.getArtists()
-                        "shows" -> api.getShows()
-                        else -> null
-                    } ?: return@async null
+        try {
+            allTabs = "all" to coroutineScope {
+                tabs.map { tab ->
+                    async(Dispatchers.IO) {
+                        val jsonObject = when (tab.id) {
+                            "playlists" -> api.getPlaylists()
+                            "albums" -> api.getAlbums()
+                            "tracks" -> api.getTracks()
+                            "artists" -> api.getArtists()
+                            "shows" -> api.getShows()
+                            else -> null
+                        } ?: return@async null
+                        val resultObject = jsonObject["results"]?.jsonObject ?: return@async null
+                        val dataArray = when (tab.id) {
+                            "playlists", "albums", "artists", "shows" -> {
+                                val tabObject =
+                                    resultObject["TAB"]?.jsonObject?.get(tab.id)?.jsonObject
+                                tabObject?.get("data")?.jsonArray
+                            }
 
-                    val resultObject = jsonObject["results"]?.jsonObject ?: return@async null
-                    val dataArray = when (tab.id) {
-                        "playlists", "albums", "artists", "shows" -> {
-                            val tabObject = resultObject["TAB"]?.jsonObject?.get(tab.id)?.jsonObject
-                            tabObject?.get("data")?.jsonArray
+                            "tracks" -> resultObject["data"]?.jsonArray
+                            else -> return@async null
                         }
+                        parser.run {
+                            dataArray?.toShelfItemsList(tab.title)
+                        }
+                    }
+                }.awaitAll().filterNotNull()
+            }
 
-                        "tracks" -> resultObject["data"]?.jsonArray
-                        else -> return@async null
-                    }
-                    parser.run {
-                        dataArray?.toShelfItemsList(tab.title)
-                    }
-                }
-            }.awaitAll().filterNotNull()
+        } catch (e: Exception) {
+            getLibraryTabs()
         }
 
         return listOf(Tab("all", "All")) + tabs

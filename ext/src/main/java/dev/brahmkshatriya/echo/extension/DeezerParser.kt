@@ -3,7 +3,7 @@ package dev.brahmkshatriya.echo.extension
 import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
-import dev.brahmkshatriya.echo.common.models.Date.Companion.toDate
+import dev.brahmkshatriya.echo.common.models.Date
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.ImageHolder
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
@@ -19,8 +19,6 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.time.Instant
-import java.util.Date
 
 class DeezerParser(private val session: DeezerSession) {
 
@@ -197,9 +195,7 @@ class DeezerParser(private val session: DeezerSession) {
             title = data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty() + if(version.isNotEmpty()) { " $version" } else { "" } ,
             cover = getCover(md5, "cover", loaded),
             duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
-            releaseDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toLongOrNull()?.let {
-                Instant.ofEpochSecond(it).epochSecond.toInt().toDate()
-            },
+            releaseDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toDate(),
             artists = listOfNotNull(
                 Artist(
                     id = artistObject["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
@@ -230,7 +226,15 @@ class DeezerParser(private val session: DeezerSession) {
             subtitle = this["subtitle"]?.jsonPrimitive?.content.orEmpty(),
             isEditable = data["PARENT_USER_ID"]?.jsonPrimitive?.content == session.credentials?.userId,
             tracks = data["NB_SONG"]?.jsonPrimitive?.int ?: 0,
-            creationDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toIntOrNull()?.toDate(),
+            creationDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toDate(),
+        )
+    }
+
+    private fun String.toDate(): Date {
+       return Date(
+            year = substringBefore("-").toInt(),
+            month = substringAfter("-").substringBeforeLast("-").toInt(),
+            day = substringAfterLast("-").substringBefore(" ").toInt()
         )
     }
 
