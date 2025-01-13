@@ -62,8 +62,8 @@ class DeezerParser(private val session: DeezerSession) {
         val itemsArray = jsonObject["items"]?.jsonArray ?: return Shelf.Lists.Categories(name, emptyList())
         return Shelf.Lists.Categories(
             title = name,
-            list = itemsArray.take(5).mapNotNull { it.jsonObject.toShelfCategory(block) },
-            type = Shelf.Lists.Type.Linear,
+            list = itemsArray.take(6).mapNotNull { it.jsonObject.toShelfCategory(block) },
+            type = Shelf.Lists.Type.Grid,
             more = PagedData.Single {
                 itemsArray.mapNotNull { it.jsonObject.toShelfCategory(block) }
             }
