@@ -57,13 +57,14 @@ class DeezerParser(private val session: DeezerSession) {
 
     fun JsonElement.toShelfCategoryList(
         name: String = "Unknown",
+        shelf: String,
         block: suspend (String) -> List<Shelf>
     ): Shelf.Lists.Categories {
         val itemsArray = jsonObject["items"]?.jsonArray ?: return Shelf.Lists.Categories(name, emptyList())
         return Shelf.Lists.Categories(
             title = name,
             list = itemsArray.take(6).mapNotNull { it.jsonObject.toShelfCategory(block) },
-            type = Shelf.Lists.Type.Grid,
+            type = if(shelf.contains("grid")) Shelf.Lists.Type.Grid else Shelf.Lists.Type.Linear,
             more = PagedData.Single {
                 itemsArray.mapNotNull { it.jsonObject.toShelfCategory(block) }
             }

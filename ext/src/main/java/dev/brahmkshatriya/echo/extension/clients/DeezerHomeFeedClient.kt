@@ -12,7 +12,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 class DeezerHomeFeedClient(private val api: DeezerApi, private val parser: DeezerParser) {
 
-    fun getHomeFeed(): PagedData<Shelf> = PagedData.Single {
+    fun getHomeFeed(shelf: String): PagedData<Shelf> = PagedData.Single {
         DeezerExtension().handleArlExpiration()
         val homePageResults = api.page("home")["results"]?.jsonObject
         val homeSections = homePageResults?.get("sections")?.jsonArray ?: JsonArray(emptyList())
@@ -32,7 +32,7 @@ class DeezerHomeFeedClient(private val api: DeezerApi, private val parser: Deeze
 
                 "868606eb-4afc-4e1a-b4e4-75b30da34ac8" -> {
                     parser.run {
-                        section.toShelfCategoryList(section.jsonObject["title"]!!.jsonPrimitive.content) { target ->
+                        section.toShelfCategoryList(section.jsonObject["title"]!!.jsonPrimitive.content, shelf) { target ->
                             DeezerExtension().channelFeed(target)
                         }
                     }

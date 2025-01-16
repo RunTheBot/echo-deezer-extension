@@ -134,6 +134,20 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
                     )
                 )
             ),
+            SettingCategory(
+                "Appearance",
+                "appearance",
+                mutableListOf(
+                    SettingList(
+                        "Shelf Type",
+                        "shelf",
+                        "Choose your preferred shelf type",
+                        mutableListOf("Grid", "Linear"),
+                        mutableListOf("grid", "linear"),
+                        0
+                    )
+                )
+            )
         )
 
     override fun setSettings(settings: Settings) {
@@ -150,7 +164,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun getHomeTabs(): List<Tab> = listOf()
 
-    override fun getHomeFeed(tab: Tab?): PagedData<Shelf> = deezerHomeFeedClient.getHomeFeed()
+    override fun getHomeFeed(tab: Tab?): PagedData<Shelf> = deezerHomeFeedClient.getHomeFeed(shelf)
 
     //<============= Library =============>
 
@@ -296,7 +310,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun quickSearch(query: String): List<QuickSearchItem.Query> = deezerSearchClient.quickSearch(query)
 
-    override fun searchFeed(query: String, tab: Tab?): PagedData.Single<Shelf> = deezerSearchClient.searchFeed(query, tab)
+    override fun searchFeed(query: String, tab: Tab?): PagedData.Single<Shelf> = deezerSearchClient.searchFeed(query, tab, shelf)
 
     override suspend fun searchTabs(query: String): List<Tab> = deezerSearchClient.searchTabs(query)
 
@@ -500,10 +514,12 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
     }
 
     private val quality: String get() = session.settings?.getString("audio_quality") ?: DEFAULT_QUALITY
+    private val shelf: String get() = session.settings?.getString("shelf") ?: DEFAULT_TYPE
     private val log: Boolean get() = session.settings?.getBoolean("log") ?: false
     private val history: Boolean get() = session.settings?.getBoolean("history") ?: true
 
     companion object {
         private const val DEFAULT_QUALITY = "320"
+        private const val DEFAULT_TYPE = "grid"
     }
 }

@@ -58,9 +58,9 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
         }
     }
 
-    fun searchFeed(query: String, tab: Tab?): PagedData.Single<Shelf> = PagedData.Single {
+    fun searchFeed(query: String, tab: Tab?, shelf: String): PagedData.Single<Shelf> = PagedData.Single {
         DeezerExtension().handleArlExpiration()
-        query.ifBlank { return@Single browseFeed() }
+        query.ifBlank { return@Single browseFeed(shelf) }
 
         if (history) {
             api.setSearchHistory(query)
@@ -88,7 +88,7 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
         processSearchResults(resultObject ?: JsonObject(emptyMap()))
     }
 
-    private suspend fun browseFeed(): List<Shelf> {
+    private suspend fun browseFeed(shelf: String): List<Shelf> {
         DeezerExtension().handleArlExpiration()
         api.updateCountry()
         val jsonObject = api.page("channels/explore/explore-tab")
@@ -99,7 +99,7 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
             when (id) {
                 "8b2c6465-874d-4752-a978-1637ca0227b5" -> {
                     parser.run {
-                        section.toShelfCategoryList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty()) { target ->
+                        section.toShelfCategoryList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty(), shelf) { target ->
                             DeezerExtension().channelFeed(target)
                         }
                     }
