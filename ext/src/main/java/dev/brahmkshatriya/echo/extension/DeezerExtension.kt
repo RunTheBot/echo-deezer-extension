@@ -473,6 +473,16 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
                 email = user.extras["email"] ?: "",
                 pass = user.extras["pass"] ?: ""
             )
+        } else {
+            session.updateCredentials(
+                arl = "",
+                sid = "",
+                token = "",
+                userId = "",
+                licenseToken = "",
+                email = "",
+                pass = ""
+            )
         }
     }
 
