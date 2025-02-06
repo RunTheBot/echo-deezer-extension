@@ -185,14 +185,19 @@ class DeezerParser(private val session: DeezerSession) {
     }
 
     @Suppress("NewApi")
-    fun JsonObject.toTrack(loaded: Boolean = false): Track {
+    fun JsonObject.toTrack(loaded: Boolean = false, fallback: Boolean = false): Track {
         val data = this["data"]?.jsonObject ?: this
         val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content.orEmpty()
         val artistObject = data["ARTISTS"]?.jsonArray?.firstOrNull()?.jsonObject ?: data
         val artistMd5 = artistObject["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty()
         val version = data["VERSION"]?.jsonPrimitive?.content.orEmpty()
+        val id = if (fallback) {
+            data["FALLBACK"]!!.jsonObject["SNG_ID"]?.jsonPrimitive?.content.orEmpty()
+        } else {
+            data["SNG_ID"]?.jsonPrimitive?.content.orEmpty()
+        }
         return Track(
-            id = data["SNG_ID"]?.jsonPrimitive?.content.orEmpty(),
+            id = id,
             title = data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty() + if(version.isNotEmpty()) { " $version" } else { "" } ,
             cover = getCover(md5, "cover", loaded),
             duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),

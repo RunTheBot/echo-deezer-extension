@@ -61,7 +61,7 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
                 api.getMediaUrl(newTrack, quality)
             }
 
-        val key = Utils.createBlowfishKey(newTrack.id)
+        var key: String = Utils.createBlowfishKey(newTrack.id)
 
         suspend fun generateUrl(trackId: String, md5Origin: String, mediaVersion: String): String {
             var url = generateTrackUrl(trackId, md5Origin, mediaVersion, 1)
@@ -81,9 +81,13 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
             jsonObject.toString()
                 .contains("Track token has no sufficient rights on requested media") -> {
                 val dataObject = fetchTrackData(track)
-                val md5Origin = dataObject["MD5_ORIGIN"]?.jsonPrimitive?.content ?: ""
-                val mediaVersion = dataObject["MEDIA_VERSION"]?.jsonPrimitive?.content ?: ""
-                generateUrl(newTrack.id, md5Origin, mediaVersion)
+                val fTrack = parser.run { dataObject.toTrack(loaded = true, fallback = true).copy(extras = track.extras) }
+                val fbObject = api.getMediaUrl(fTrack, quality)
+                val fbDataObject = fbObject["data"]!!.jsonArray.first().jsonObject
+                val mediaObject = fbDataObject["media"]!!.jsonArray.first().jsonObject
+                val sourcesObject = mediaObject["sources"]!!.jsonArray[0]
+                key = Utils.createBlowfishKey(fTrack.id)
+                sourcesObject.jsonObject["url"]!!.jsonPrimitive.content
             }
 
             newTrack.extras["FILESIZE_MP3_MISC"] != "0" && newTrack.extras["FILESIZE_MP3_MISC"] != null && jsonObject["data"]!!.jsonArray.first().jsonObject["media"]?.jsonArray?.isEmpty() == true -> {
