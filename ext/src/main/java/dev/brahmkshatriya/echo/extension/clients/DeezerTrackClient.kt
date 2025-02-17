@@ -73,8 +73,25 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
                 val fallbackMediaVersion = fallbackData["MEDIA_VERSION"]?.jsonPrimitive?.content.orEmpty()
                 url = generateTrackUrl(trackId, fallbackMd5Origin, fallbackMediaVersion, 1)
             }
-
             return url
+        }
+
+        suspend fun getGeneratedUrl(trackId: String, track: Track, useFallback: Boolean): Pair<String, Track?> {
+            return if (useFallback) {
+                val data = fetchTrackData(track)
+                val fallbackInfo = data["FALLBACK"]!!.jsonObject
+                val fallbackId = fallbackInfo["SNG_ID"]?.jsonPrimitive?.content.orEmpty()
+                val newFallbackTrack = track.copy(id = fallbackId)
+                val newData = fetchTrackData(newFallbackTrack)
+                val md5Origin = newData["MD5_ORIGIN"]?.jsonPrimitive?.content.orEmpty()
+                val mediaVersion = newData["MEDIA_VERSION"]?.jsonPrimitive?.content.orEmpty()
+                generateUrl(trackId, md5Origin, mediaVersion) to newFallbackTrack
+            } else {
+                val freshData = fetchTrackData(track)
+                val md5Origin = freshData["MD5_ORIGIN"]?.jsonPrimitive?.content.orEmpty()
+                val mediaVersion = freshData["MEDIA_VERSION"]?.jsonPrimitive?.content.orEmpty()
+                generateUrl(trackId, md5Origin, mediaVersion) to null
+            }
         }
 
         val initialData = fetchTrackData(track)
@@ -86,51 +103,29 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
             return newTrack
         }
 
-        val mediaJson = if (newTrack.extras["FILESIZE_MP3_MISC"].let { it != null && it != "0" }) {
-            api.getMP3MediaUrl(newTrack)
-        } else {
-            api.getMediaUrl(newTrack, quality)
-        }
+        val hasMp3Misc = newTrack.extras["FILESIZE_MP3_MISC"]?.let { it != "0" } ?: false
+        val mediaJson = if (hasMp3Misc) api.getMP3MediaUrl(newTrack) else api.getMediaUrl(newTrack, quality)
 
-        var encryptionKey = Utils.createBlowfishKey(newTrack.id)
-
-        val fileSizeMp3Misc = newTrack.extras["FILESIZE_MP3_MISC"]
-        val hasMp3Misc = fileSizeMp3Misc != null && fileSizeMp3Misc != "0"
         val trackJsonData = mediaJson["data"]?.jsonArray?.first()?.jsonObject
         val mediaIsEmpty = trackJsonData?.get("media")?.jsonArray?.isEmpty() == true
 
-        var fallbackTrack: Track? = null
-
-        val finalUrl = when {
+        val (finalUrl, fallbackTrack) = when {
             mediaJson.toString().contains("Track token has no sufficient rights on requested media") -> {
                 val fallbackData = fetchTrackData(track)
-                fallbackTrack = parser.run {
+                val fallbackTrack = parser.run {
                     fallbackData.toTrack(loaded = true, fallback = true).copy(extras = track.extras)
                 }
                 val fallbackMediaJson = api.getMediaUrl(fallbackTrack, quality)
-                encryptionKey = Utils.createBlowfishKey(fallbackTrack.id)
-                extractUrlFromJson(fallbackMediaJson)
+                extractUrlFromJson(fallbackMediaJson) to fallbackTrack
             }
-
-            hasMp3Misc && mediaIsEmpty -> {
-                val freshData = fetchTrackData(track)
-                val md5Origin = freshData["MD5_ORIGIN"]?.jsonPrimitive?.content.orEmpty()
-                val mediaVersion = freshData["MEDIA_VERSION"]?.jsonPrimitive?.content.orEmpty()
-                generateUrl(newTrack.id, md5Origin, mediaVersion)
-            }
-
             mediaIsEmpty -> {
-                val data = fetchTrackData(track)
-                val fallbackInfo = data["FALLBACK"]!!.jsonObject
-                val fallbackId = fallbackInfo["SNG_ID"]?.jsonPrimitive?.content.orEmpty()
-                fallbackTrack = track.copy(id = fallbackId)
-                val newData = fetchTrackData(fallbackTrack)
-                val md5Origin = newData["MD5_ORIGIN"]?.jsonPrimitive?.content.orEmpty()
-                val mediaVersion = newData["MEDIA_VERSION"]?.jsonPrimitive?.content.orEmpty()
-                generateUrl(newTrack.id, md5Origin, mediaVersion)
+                if (hasMp3Misc) {
+                    getGeneratedUrl(newTrack.id, track, useFallback = false)
+                } else {
+                    getGeneratedUrl(newTrack.id, track, useFallback = true)
+                }
             }
-
-            else -> extractUrlFromJson(mediaJson)
+            else -> extractUrlFromJson(mediaJson) to null
         }
 
         return newTrack.copy(
@@ -141,7 +136,7 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
                     id = finalUrl,
                     quality = 0,
                     title = fallbackTrack?.title ?: newTrack.title,
-                    extras = mapOf("key" to encryptionKey)
+                    extras = mapOf("key" to Utils.createBlowfishKey(fallbackTrack?.id ?: newTrack.id))
                 )
             )
         )
