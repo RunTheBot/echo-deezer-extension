@@ -20,7 +20,7 @@ jobs:
           cache: 'gradle'
 
       - name: Cook Variables from gradle.properties
-        run: |
+        run : |
           name=$(grep '^extName=' gradle.properties | cut -d'=' -f2)
           echo "NAME=$name Extension" >> $GITHUB_ENV
           id=$(grep '^extId=' gradle.properties | cut -d'=' -f2)
@@ -63,7 +63,7 @@ jobs:
         uses: sgpublic/delete-release-action@master
         with:
           release-drop: true
-          release-keep-count: 3
+          release-keep-count: 2
           release-drop-tag: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
