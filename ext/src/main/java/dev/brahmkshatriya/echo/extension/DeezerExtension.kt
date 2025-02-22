@@ -93,14 +93,6 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
                 "Quality",
                 "quality",
                 mutableListOf(
-                    SettingList(
-                        "Audio Quality",
-                        "audio_quality",
-                        "Choose your preferred audio quality",
-                        mutableListOf("FLAC", "320kbps", "128kbps"),
-                        mutableListOf("flac", "320", "128"),
-                        1
-                    ),
                     SettingSlider(
                         "Image Quality",
                         "image_quality",
@@ -339,7 +331,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media = deezerTrackClient.loadStreamableMedia(streamable, isDownload)
 
-    override suspend fun loadTrack(track: Track): Track = deezerTrackClient.loadTrack(track, quality)
+    override suspend fun loadTrack(track: Track): Track = deezerTrackClient.loadTrack(track)
 
     override fun getShelves(track: Track): PagedData<Shelf> = getShelves(track.artists.first())
 
@@ -523,13 +515,11 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         }
     }
 
-    private val quality: String get() = session.settings?.getString("audio_quality") ?: DEFAULT_QUALITY
     private val shelf: String get() = session.settings?.getString("shelf") ?: DEFAULT_TYPE
     private val log: Boolean get() = session.settings?.getBoolean("log") ?: false
     private val history: Boolean get() = session.settings?.getBoolean("history") ?: true
 
     companion object {
-        private const val DEFAULT_QUALITY = "320"
         private const val DEFAULT_TYPE = "grid"
     }
 }

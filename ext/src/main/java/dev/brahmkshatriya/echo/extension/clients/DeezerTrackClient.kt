@@ -14,6 +14,9 @@ import dev.brahmkshatriya.echo.extension.getByteStreamAudio
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -27,7 +30,7 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
 
     suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media {
         DeezerExtension().handleArlExpiration()
-        return if (streamable.quality == 1) {
+        return if (streamable.quality == 12) {
             streamable.id.toSource().toMedia()
         } else {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -41,53 +44,53 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
         }
     }
 
-    suspend fun loadTrack(track: Track, quality: String): Track {
+    suspend fun loadTrack(track: Track): Track {
         DeezerExtension().handleArlExpiration()
 
         suspend fun fetchTrackData(track: Track): JsonObject {
             val response = api.track(arrayOf(track))
-            return response["results"]!!
-                .jsonObject["data"]!!
-                .jsonArray.first().jsonObject
+            return response["results"]?.jsonObject
+                ?.get("data")?.jsonArray
+                ?.firstOrNull()?.jsonObject ?: error("Invalid response: missing track data")
         }
 
         fun extractUrlFromJson(json: JsonObject): String {
-            val data = json["data"]?.jsonArray?.first()?.jsonObject
+            val data = json["data"]?.jsonArray?.firstOrNull()?.jsonObject
                 ?: error("No data found in JSON")
-            val media = data["media"]?.jsonArray?.first()?.jsonObject
+            val media = data["media"]?.jsonArray?.firstOrNull()?.jsonObject
                 ?: error("No media found in JSON data")
-            val source = media["sources"]?.jsonArray?.first()?.jsonObject
+            val source = media["sources"]?.jsonArray?.firstOrNull()?.jsonObject
                 ?: error("No sources found in media")
-            return source["url"]?.jsonPrimitive?.content
-                ?: error("No URL found in source")
+            return source["url"]?.jsonPrimitive?.content ?: error("No URL found in source")
         }
 
         suspend fun generateUrl(trackId: String, md5Origin: String, mediaVersion: String): String {
             var url = generateTrackUrl(trackId, md5Origin, mediaVersion, 1)
             val request = Request.Builder().url(url).build()
-            val responseCode = client.newCall(request).execute().code
-
-            if (responseCode == 403) {
-                val fallbackData = fetchTrackData(track)["FALLBACK"]!!.jsonObject
-                val fallbackMd5Origin = fallbackData["MD5_ORIGIN"]?.jsonPrimitive?.content.orEmpty()
-                val fallbackMediaVersion = fallbackData["MEDIA_VERSION"]?.jsonPrimitive?.content.orEmpty()
-                url = generateTrackUrl(trackId, fallbackMd5Origin, fallbackMediaVersion, 1)
+            client.newCall(request).execute().use { response ->
+                if (response.code == 403) {
+                    val fallbackJson = fetchTrackData(track)["FALLBACK"]?.jsonObject
+                        ?: error("Fallback data missing")
+                    val fallbackMd5Origin = fallbackJson["MD5_ORIGIN"]?.jsonPrimitive?.content.orEmpty()
+                    val fallbackMediaVersion = fallbackJson["MEDIA_VERSION"]?.jsonPrimitive?.content.orEmpty()
+                    url = generateTrackUrl(trackId, fallbackMd5Origin, fallbackMediaVersion, 1)
+                }
             }
             return url
         }
 
-        suspend fun getGeneratedUrl(trackId: String, track: Track, useFallback: Boolean): Pair<String, Track?> {
+        suspend fun getGeneratedUrl(trackId: String, originalTrack: Track, useFallback: Boolean): Pair<String, Track?> {
             return if (useFallback) {
-                val data = fetchTrackData(track)
-                val fallbackInfo = data["FALLBACK"]!!.jsonObject
+                val fallbackData = fetchTrackData(originalTrack)
+                val fallbackInfo = fallbackData["FALLBACK"]?.jsonObject ?: error("Fallback info missing")
                 val fallbackId = fallbackInfo["SNG_ID"]?.jsonPrimitive?.content.orEmpty()
-                val newFallbackTrack = track.copy(id = fallbackId)
-                val newData = fetchTrackData(newFallbackTrack)
-                val md5Origin = newData["MD5_ORIGIN"]?.jsonPrimitive?.content.orEmpty()
-                val mediaVersion = newData["MEDIA_VERSION"]?.jsonPrimitive?.content.orEmpty()
-                generateUrl(trackId, md5Origin, mediaVersion) to newFallbackTrack
+                val fallbackTrack = originalTrack.copy(id = fallbackId)
+                val updatedData = fetchTrackData(fallbackTrack)
+                val md5Origin = updatedData["MD5_ORIGIN"]?.jsonPrimitive?.content.orEmpty()
+                val mediaVersion = updatedData["MEDIA_VERSION"]?.jsonPrimitive?.content.orEmpty()
+                generateUrl(trackId, md5Origin, mediaVersion) to fallbackTrack
             } else {
-                val freshData = fetchTrackData(track)
+                val freshData = fetchTrackData(originalTrack)
                 val md5Origin = freshData["MD5_ORIGIN"]?.jsonPrimitive?.content.orEmpty()
                 val mediaVersion = freshData["MEDIA_VERSION"]?.jsonPrimitive?.content.orEmpty()
                 generateUrl(trackId, md5Origin, mediaVersion) to null
@@ -95,51 +98,91 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
         }
 
         val initialData = fetchTrackData(track)
-        val newTrack = parser.run {
+        val loadedTrack = parser.run {
             initialData.toTrack(loaded = true).copy(extras = track.extras)
         }
 
-        if (newTrack.extras["__TYPE__"] == "show") {
-            return newTrack
+        if (loadedTrack.extras["__TYPE__"] == "show") {
+            return loadedTrack
         }
 
-        val hasMp3Misc = newTrack.extras["FILESIZE_MP3_MISC"]?.let { it != "0" } ?: false
-        val mediaJson = if (hasMp3Misc) api.getMP3MediaUrl(newTrack) else api.getMediaUrl(newTrack, quality)
+        val hasMp3Misc = loadedTrack.extras["FILESIZE_MP3_MISC"]?.let { it != "0" } ?: false
+        val qualityOptions = listOf("flac", "320", "128")
 
-        val trackJsonData = mediaJson["data"]?.jsonArray?.first()?.jsonObject
-        val mediaIsEmpty = trackJsonData?.get("media")?.jsonArray?.isEmpty() == true
+        return if (hasMp3Misc) {
+            val mediaJson = api.getMP3MediaUrl(loadedTrack)
+            val trackJsonData = mediaJson["data"]?.jsonArray?.firstOrNull()?.jsonObject
+            val mediaIsEmpty = trackJsonData?.get("media")?.jsonArray?.isEmpty() == true
 
-        val (finalUrl, fallbackTrack) = when {
-            mediaJson.toString().contains("Track token has no sufficient rights on requested media") -> {
-                val fallbackData = fetchTrackData(track)
-                val fallbackTrack = parser.run {
-                    fallbackData.toTrack(loaded = true, fallback = true).copy(extras = track.extras)
-                }
-                val fallbackMediaJson = api.getMediaUrl(fallbackTrack, quality)
-                extractUrlFromJson(fallbackMediaJson) to fallbackTrack
+            val (finalUrl, _) = if (mediaIsEmpty) {
+                getGeneratedUrl(loadedTrack.id, track, useFallback = false)
+            } else {
+                extractUrlFromJson(mediaJson) to null
             }
-            mediaIsEmpty -> {
-                if (hasMp3Misc) {
-                    getGeneratedUrl(newTrack.id, track, useFallback = false)
-                } else {
-                    getGeneratedUrl(newTrack.id, track, useFallback = true)
-                }
-            }
-            else -> extractUrlFromJson(mediaJson) to null
-        }
 
-        return newTrack.copy(
-            id = fallbackTrack?.id ?: newTrack.id,
-            isLiked = isTrackLiked(newTrack.id),
-            streamables = listOf(
-                Streamable.server(
-                    id = finalUrl,
-                    quality = 0,
-                    title = fallbackTrack?.title ?: newTrack.title,
-                    extras = mapOf("key" to Utils.createBlowfishKey(fallbackTrack?.id ?: newTrack.id))
+            loadedTrack.copy(
+                isLiked = isTrackLiked(loadedTrack.id),
+                streamables = listOf(
+                    Streamable.server(
+                        id = finalUrl,
+                        quality = 0,
+                        title = "MP3",
+                        extras = mapOf("key" to Utils.createBlowfishKey(loadedTrack.id))
+                    )
                 )
             )
-        )
+        } else {
+            val streamables = coroutineScope {
+                qualityOptions.map { quality ->
+                    async(Dispatchers.IO) {
+                        try {
+                            val mediaJson = api.getMediaUrl(loadedTrack, quality)
+                            val trackJsonData = mediaJson["data"]?.jsonArray?.firstOrNull()?.jsonObject
+                            val mediaIsEmpty = trackJsonData?.get("media")?.jsonArray?.isEmpty() == true
+
+                            val (finalUrl, fallbackTrack) = when {
+                                mediaJson.toString().contains("Track token has no sufficient rights on requested media") -> {
+                                    val fallbackData = fetchTrackData(track)
+                                    val fallbackParsed = parser.run {
+                                        fallbackData.toTrack(loaded = true, fallback = true).copy(extras = track.extras)
+                                    }
+                                    val fallbackMediaJson = api.getMediaUrl(fallbackParsed, quality)
+                                    extractUrlFromJson(fallbackMediaJson) to fallbackParsed
+                                }
+                                mediaIsEmpty -> {
+                                    getGeneratedUrl(loadedTrack.id, track, useFallback = true)
+                                }
+                                else -> extractUrlFromJson(mediaJson) to null
+                            }
+
+                            Streamable.server(
+                                id = finalUrl,
+                                quality = when (quality) {
+                                    "flac" -> 3
+                                    "320" -> 2
+                                    "128" -> 1
+                                    else -> 0
+                                },
+                                title = when (quality) {
+                                    "flac" -> "FLAC"
+                                    "320" -> "320kbps"
+                                    "128" -> "128kbps"
+                                    else -> "UNKNOWN"
+                                },
+                                extras = mapOf("key" to Utils.createBlowfishKey(fallbackTrack?.id ?: loadedTrack.id))
+                            )
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                }.awaitAll().filterNotNull()
+            }
+
+            loadedTrack.copy(
+                isLiked = isTrackLiked(loadedTrack.id),
+                streamables = streamables
+            )
+        }
     }
 
     private suspend fun isTrackLiked(id: String): Boolean {

@@ -8,6 +8,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.internal.closeQuietly
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.BufferedReader
@@ -249,7 +250,7 @@ object LocalAudioServer {
                 e.printStackTrace()
             }
         } finally {
-            output.close()
+            output.closeQuietly()
         }
     }
 
