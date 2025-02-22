@@ -47,6 +47,10 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
     suspend fun loadTrack(track: Track): Track {
         DeezerExtension().handleArlExpiration()
 
+        if (track.extras["__TYPE__"] == "show") {
+            return track
+        }
+
         suspend fun fetchTrackData(track: Track): JsonObject {
             val response = api.track(arrayOf(track))
             return response["results"]?.jsonObject
@@ -100,10 +104,6 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
         val initialData = fetchTrackData(track)
         val loadedTrack = parser.run {
             initialData.toTrack(loaded = true).copy(extras = track.extras)
-        }
-
-        if (loadedTrack.extras["__TYPE__"] == "show") {
-            return loadedTrack
         }
 
         val hasMp3Misc = loadedTrack.extras["FILESIZE_MP3_MISC"]?.let { it != "0" } ?: false

@@ -65,96 +65,101 @@ class DeezerRadioClient(private val api: DeezerApi, private val parser: DeezerPa
     }
 
     fun radio(track: Track, context: EchoMediaItem?): Radio {
-        return when (context) {
-            null -> {
-                Radio(
-                    id = track.id,
-                    title = track.title,
-                    cover = track.cover,
-                    extras = mapOf(
-                        "radio" to "track"
+
+        return try {
+            when (context) {
+                null -> {
+                    Radio(
+                        id = track.id,
+                        title = track.title,
+                        cover = track.cover,
+                        extras = mapOf(
+                            "radio" to "track"
+                        )
                     )
-                )
-            }
+                }
 
-            is EchoMediaItem.Lists.RadioItem -> {
-                when (context.radio.extras["radio"]) {
-                    "track" -> {
-                        Radio(
-                            id = track.id,
-                            title = track.title,
-                            cover = track.cover,
-                            extras = mapOf(
-                                "radio" to "track"
+                is EchoMediaItem.Lists.RadioItem -> {
+                    when (context.radio.extras["radio"]) {
+                        "track" -> {
+                            Radio(
+                                id = track.id,
+                                title = track.title,
+                                cover = track.cover,
+                                extras = mapOf(
+                                    "radio" to "track"
+                                )
                             )
-                        )
-                    }
+                        }
 
-                    "artist" -> {
-                        Radio(
-                            id = context.radio.id,
-                            title = context.radio.title,
-                            cover = context.radio.cover,
-                            extras = mapOf(
-                                "radio" to "artist"
+                        "artist" -> {
+                            Radio(
+                                id = context.radio.id,
+                                title = context.radio.title,
+                                cover = context.radio.cover,
+                                extras = mapOf(
+                                    "radio" to "artist"
+                                )
                             )
-                        )
-                    }
+                        }
 
-                    "playlist", "album" -> {
-                        Radio(
-                            id = track.id,
-                            title = track.title,
-                            cover = track.cover,
-                            extras = mapOf(
-                                ("radio" to context.radio.extras["radio"].orEmpty()),
-                                "artist" to track.artists[0].id
+                        "playlist", "album" -> {
+                            Radio(
+                                id = track.id,
+                                title = track.title,
+                                cover = track.cover,
+                                extras = mapOf(
+                                    ("radio" to context.radio.extras["radio"].orEmpty()),
+                                    "artist" to track.artists[0].id
+                                )
                             )
-                        )
-                    }
+                        }
 
-                    else -> {
-                        context.radio
+                        else -> {
+                            context.radio
+                        }
                     }
                 }
-            }
 
-            is EchoMediaItem.Profile.ArtistItem -> {
-                Radio(
-                    id = context.artist.id,
-                    title =  context.artist.name,
-                    cover = context.artist.cover,
-                    extras = mapOf(
-                        "radio" to "artist"
+                is EchoMediaItem.Profile.ArtistItem -> {
+                    Radio(
+                        id = context.artist.id,
+                        title = context.artist.name,
+                        cover = context.artist.cover,
+                        extras = mapOf(
+                            "radio" to "artist"
+                        )
                     )
-                )
-            }
+                }
 
-            is EchoMediaItem.Lists.PlaylistItem -> {
-                Radio(
-                    id = track.id,
-                    title = track.title,
-                    cover = track.cover,
-                    extras = mapOf(
-                        "radio" to "playlist",
-                        "artist" to track.artists[0].id
+                is EchoMediaItem.Lists.PlaylistItem -> {
+                    Radio(
+                        id = track.id,
+                        title = track.title,
+                        cover = track.cover,
+                        extras = mapOf(
+                            "radio" to "playlist",
+                            "artist" to track.artists[0].id
+                        )
                     )
-                )
-            }
+                }
 
-            is EchoMediaItem.Lists.AlbumItem -> {
-                Radio(
-                    id = track.id,
-                    title = track.title,
-                    cover = track.cover,
-                    extras = mapOf(
-                        "radio" to "album",
-                        "artist" to track.artists[0].id
+                is EchoMediaItem.Lists.AlbumItem -> {
+                    Radio(
+                        id = track.id,
+                        title = track.title,
+                        cover = track.cover,
+                        extras = mapOf(
+                            "radio" to "album",
+                            "artist" to track.artists[0].id
+                        )
                     )
-                )
-            }
+                }
 
-            else -> throw Exception("Radio Error")
+                else -> throw Exception("Radio Error")
+            }
+        } catch (e: Exception) {
+            error("No Radio")
         }
     }
 
