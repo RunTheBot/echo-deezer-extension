@@ -209,6 +209,11 @@ class DeezerParser(private val session: DeezerSession) {
                     cover = getCover(artistMd5, "artist")
                 )
             ),
+            album = Album(
+                id = data["ALB_ID"]?.jsonPrimitive?.content.orEmpty(),
+                title = data["ALB_TITLE"]?.jsonPrimitive?.content.orEmpty(),
+                cover = getCover(md5, "cover", loaded)
+            ),
             isExplicit = data["EXPLICIT_LYRICS"]?.jsonPrimitive?.content?.equals("1") ?: false,
             extras = mapOf(
                 "TRACK_TOKEN" to data["TRACK_TOKEN"]?.jsonPrimitive?.content.orEmpty(),

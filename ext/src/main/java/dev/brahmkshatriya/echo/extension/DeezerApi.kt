@@ -254,7 +254,7 @@ class DeezerApi(private val session: DeezerSession) {
         return userList
     }
 
-    suspend fun getArlByEmail(mail: String, password: String) {
+    suspend fun getArlByEmail(mail: String, password: String, remainingAttempts: Int = 3) {
         try {
             // Get SID
             getSid()
@@ -280,7 +280,11 @@ class DeezerApi(private val session: DeezerSession) {
             val arlObject = json.decodeFromString<JsonObject>(arlResponse)
             session.updateCredentials(arl = arlObject["results"]!!.jsonPrimitive.content)
         } catch (e: Exception) {
-            getArlByEmail(mail, password)
+            if (remainingAttempts > 1) {
+                getArlByEmail(mail, password, remainingAttempts - 1)
+            } else {
+                throw e
+            }
         }
     }
 

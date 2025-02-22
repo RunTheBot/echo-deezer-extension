@@ -457,7 +457,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         // Set shared credentials
         session.updateCredentials(email = username, pass = password)
 
-        api.getArlByEmail(username, password)
+        api.getArlByEmail(username, password, 3)
         val userList = api.makeUser(username, password)
         return userList
     }
