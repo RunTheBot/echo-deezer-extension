@@ -9,6 +9,7 @@ import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
+import okhttp3.internal.closeQuietly
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -168,7 +169,7 @@ fun getInputStream(
                     }
 
                     if (!shouldReopen) {
-                        response.close()
+                        response.closeQuietly()
                     }
                 }
             }
@@ -176,7 +177,7 @@ fun getInputStream(
             e.printStackTrace()
         } finally {
             try {
-                pipedOutputStream.close()
+                pipedOutputStream.closeQuietly()
             } catch (e: IOException) {
                 e.printStackTrace()
             }

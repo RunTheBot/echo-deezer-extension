@@ -52,6 +52,7 @@ class DeezerAlbumClient(private val api: DeezerApi, private val parser: DeezerPa
                     duration = currentTrack.duration,
                     releaseDate = currentTrack.releaseDate,
                     artists = currentTrack.artists,
+                    album = currentTrack.album,
                     extras = currentTrack.extras.plus(
                         mapOf(
                             Pair("NEXT", nextTrack?.id.orEmpty()),

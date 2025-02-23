@@ -61,7 +61,7 @@ object LocalAudioServer {
         synchronized(lock) {
             serverJob?.cancel()
             serverJob = null
-            serverSocket?.close()
+            serverSocket?.closeQuietly()
             serverSocket = null
         }
     }
