@@ -96,7 +96,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
                     SettingSlider(
                         "Image Quality",
                         "image_quality",
-                        "Choose your preferred image quality",
+                        "Choose your preferred image quality (Can impact loading times)",
                         240,
                         120,
                         1920,

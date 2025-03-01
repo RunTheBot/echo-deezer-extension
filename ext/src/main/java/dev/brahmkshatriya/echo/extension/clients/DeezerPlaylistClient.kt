@@ -40,20 +40,12 @@ class DeezerPlaylistClient(private val api: DeezerApi, private val parser: Deeze
         val jsonObject = api.playlist(playlist)
         val dataArray = jsonObject["results"]!!.jsonObject["SONGS"]!!.jsonObject["data"]!!.jsonArray
         dataArray.mapIndexed { index, song ->
-            val currentTrack = parser.run { song.jsonObject.toTrack() }
+            val currentTrack = parser.run { song.jsonObject.toTrack(true) }
             val nextTrack = parser.run { dataArray.getOrNull(index + 1)?.jsonObject?.toTrack() }
-            Track(
-                id = currentTrack.id,
-                title = currentTrack.title,
-                cover = currentTrack.cover,
-                duration = currentTrack.duration,
-                releaseDate = currentTrack.releaseDate,
-                artists = currentTrack.artists,
-                extras = currentTrack.extras.plus(
-                    mapOf(
-                        "NEXT" to nextTrack?.id.orEmpty(),
-                        "playlist_id" to playlist.id
-                    )
+            currentTrack.copy(
+                extras = currentTrack.extras + mapOf(
+                    "NEXT" to nextTrack?.id.orEmpty(),
+                    "playlist_id" to playlist.id
                 )
             )
         }
