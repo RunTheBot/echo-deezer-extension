@@ -68,12 +68,6 @@ class DeezerMedia(private val json: Json, private val clientNP: OkHttpClient) {
     }
 
     fun getMediaUrl(track: Track, quality: String): JsonObject {
-        val url = HttpUrl.Builder()
-            .scheme("https")
-            .host("dzmedia.fly.dev")
-            .addPathSegment("get_url")
-            .build()
-
         val formats = when (quality) {
             "128" -> arrayOf("MP3_128", "MP3_64", "MP3_MISC")
             "flac" -> arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
@@ -88,7 +82,7 @@ class DeezerMedia(private val json: Json, private val clientNP: OkHttpClient) {
         ).toRequestBody("application/json; charset=utf-8".toMediaType())
 
         val request = Request.Builder()
-            .url(url)
+            .url("https://dzmedia.fly.dev/get_url")
             .post(requestBody)
             .build()
 

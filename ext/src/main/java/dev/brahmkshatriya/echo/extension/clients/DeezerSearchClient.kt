@@ -107,7 +107,21 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
 
                 !in "6550abfd-15e4-47de-a5e8-a60e27fa152a", !in "c8b406d4-5293-4f59-a0f4-562eba496a0b" -> {
                     parser.run {
-                        section.toShelfItemsList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty())
+                        val secShelf =
+                            section.toShelfItemsList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty()) as? Shelf.Lists.Items
+                                ?: return@run null
+                        val list = secShelf.list
+                        Shelf.Lists.Items(
+                            title = secShelf.title,
+                            subtitle = secShelf.subtitle,
+                            type = Shelf.Lists.Type.Linear,
+                            more = PagedData.Single {
+                                list.map {
+                                    it
+                                }
+                            },
+                            list = list
+                        )
                     }
                 }
 
