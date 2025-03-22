@@ -63,8 +63,8 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
                 ?: error("No data found in JSON")
             val media = data["media"]?.jsonArray?.firstOrNull()?.jsonObject
                 ?: error("No media found in JSON data")
-            val source = media["sources"]?.jsonArray?.firstOrNull()?.jsonObject
-                ?: error("No sources found in media")
+            val source = media["sources"]?.jsonArray?.get(1)?.jsonObject
+                ?: media["sources"]?.jsonArray?.firstOrNull()?.jsonObject ?: error("No sources found in media")
             return source["url"]?.jsonPrimitive?.content ?: error("No URL found in source")
         }
 

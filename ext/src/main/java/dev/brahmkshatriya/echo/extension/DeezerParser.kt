@@ -15,6 +15,8 @@ import dev.brahmkshatriya.echo.common.models.Track
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -170,18 +172,31 @@ class DeezerParser(private val session: DeezerSession) {
     }
 
     fun JsonObject.toArtist(isFollowing: Boolean = false, loaded: Boolean = false, isShelfItem: Boolean = false): Artist {
-        val data = if (isShelfItem) this
-        else if (this["DATA"]?.jsonObject?.get("ART_BANNER") == null)
-            this["DATA"]?.jsonObject ?: this["data"]?.jsonObject ?: this
-        else
-            this["data"]?.jsonObject ?: this
-        val md5 = data["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty()
+        val artistData = if (isShelfItem) { this } else {
+            val dataFromDATA = this["DATA"]?.jsonObject
+            val dataFromData = this["data"]?.jsonObject
+            if (dataFromDATA?.get("ART_BANNER") == null)
+                dataFromDATA ?: dataFromData ?: this
+            else
+                dataFromData ?: this
+        }
+        val md5 = artistData["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty()
+        val description = if (this["BIO"] is JsonObject) {
+            val bioObj = this["BIO"]!!.jsonObject
+            val bioText = bioObj["BIO"]?.jsonPrimitive?.content.orEmpty()
+                .replace("<br />", "")
+                .replace("\\n", "")
+            val resumeText = bioObj["RESUME"]?.jsonPrimitive?.content.orEmpty()
+                .replace("<p>", "")
+                .replace("</p>", "")
+            bioText + resumeText
+        } else { "" }
         return Artist(
-            id = data["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
-            name = data["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
+            id = artistData["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
+            name = artistData["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
             cover = getCover(md5, "artist", loaded),
-            followers = data["NB_FAN"]?.jsonPrimitive?.int,
-            description = this["BIO"]?.jsonObject?.get("RESUME")?.jsonPrimitive?.content?.replace("<p>", "")?.replace("</p>", "").orEmpty(),
+            followers = artistData["NB_FAN"]?.jsonPrimitive?.int,
+            description = description,
             subtitle = this["subtitle"]?.jsonPrimitive?.content.orEmpty(),
             isFollowing = isFollowing
         )
