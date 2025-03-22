@@ -164,7 +164,8 @@ class DeezerApi(private val session: DeezerSession) {
     suspend fun callApi(
         method: String,
         params: JsonObject = buildJsonObject { },
-        gatewayInput: String? = ""
+        gatewayInput: String? = "",
+        np: Boolean = false
     ): String = withContext(Dispatchers.IO) {
         val url = HttpUrl.Builder()
             .scheme("https")
@@ -195,7 +196,9 @@ class DeezerApi(private val session: DeezerSession) {
             }
             .build()
 
-        client.newCall(request).await().use { response ->
+        val clientB = if (np) clientNP else client
+
+        clientB.newCall(request).await().use { response ->
             val responseBody = response.body.string()
             if (!response.isSuccessful) throw Exception("API call failed with status ${response.code}: $responseBody")
 

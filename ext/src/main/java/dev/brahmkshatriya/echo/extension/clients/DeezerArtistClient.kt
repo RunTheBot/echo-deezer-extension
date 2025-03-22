@@ -108,7 +108,7 @@ class DeezerArtistClient(private val api: DeezerApi, private val parser: DeezerP
         DeezerExtension().handleArlExpiration()
         val jsonObject = api.artist(artist.id)
         val resultsObject =
-            jsonObject["results"]?.jsonObject?.get("DATA")?.jsonObject ?: return artist
+            jsonObject["results"]?.jsonObject ?: return artist
         val isFollowing = isFollowingArtist(artist.id)
         return parser.run { resultsObject.toArtist(isFollowing, true) }
     }

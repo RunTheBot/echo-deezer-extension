@@ -99,7 +99,7 @@ class DeezerParser(private val session: DeezerSession) {
             "playlist" in type -> EchoMediaItem.Lists.PlaylistItem(toPlaylist())
             "album" in type -> EchoMediaItem.Lists.AlbumItem(toAlbum())
             "song" in type -> EchoMediaItem.TrackItem(toTrack())
-            "artist" in type -> EchoMediaItem.Profile.ArtistItem(toArtist())
+            "artist" in type -> EchoMediaItem.Profile.ArtistItem(toArtist(isShelfItem = true))
             "show" in type -> EchoMediaItem.Lists.AlbumItem(toShow())
             "episode" in type -> EchoMediaItem.TrackItem(toEpisode())
             "flow" in type -> EchoMediaItem.Lists.RadioItem(toRadio())
@@ -150,35 +150,38 @@ class DeezerParser(private val session: DeezerSession) {
     fun JsonObject.toAlbum(loaded: Boolean = false): Album {
         val data = this["data"]?.jsonObject ?: this["DATA"]?.jsonObject ?: this
         val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content.orEmpty()
-        val artistObject = data["ARTISTS"]?.jsonArray?.firstOrNull()?.jsonObject
-        val artistMd5 = artistObject?.get("ART_PICTURE")?.jsonPrimitive?.content.orEmpty()
+        val artistArray = data["ARTISTS"]?.jsonArray.orEmpty()
         return Album(
             id = data["ALB_ID"]?.jsonPrimitive?.content.orEmpty(),
             title = data["ALB_TITLE"]?.jsonPrimitive?.content.orEmpty(),
             cover = getCover(md5, "cover", loaded),
             tracks = this["SONGS"]?.jsonObject?.get("total")?.jsonPrimitive?.int,
-            artists = listOfNotNull(
-                artistObject?.let {
-                    Artist(
-                        id = it["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
-                        name = it["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
-                        cover = getCover(artistMd5, "artist")
-                    )
-                }
-            ),
+            artists = artistArray.map { artistObject ->
+                Artist(
+                    id = artistObject.jsonObject["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
+                    name = artistObject.jsonObject["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
+                    cover = getCover(artistObject.jsonObject["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty(), "artist")
+                )
+            },
+            releaseDate = data["ORIGINAL_RELEASE_DATE"]?.jsonPrimitive?.content?.toDate(),
             description = this["description"]?.jsonPrimitive?.content.orEmpty(),
             subtitle = this["subtitle"]?.jsonPrimitive?.content.orEmpty()
         )
     }
 
-    fun JsonObject.toArtist(isFollowing: Boolean = false, loaded: Boolean = false): Artist {
-        val data = this["data"]?.jsonObject ?: this
+    fun JsonObject.toArtist(isFollowing: Boolean = false, loaded: Boolean = false, isShelfItem: Boolean = false): Artist {
+        val data = if (isShelfItem) this
+        else if (this["DATA"]?.jsonObject?.get("ART_BANNER") == null)
+            this["DATA"]?.jsonObject ?: this["data"]?.jsonObject ?: this
+        else
+            this["data"]?.jsonObject ?: this
         val md5 = data["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty()
         return Artist(
             id = data["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
             name = data["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
             cover = getCover(md5, "artist", loaded),
-            description = this["description"]?.jsonPrimitive?.content.orEmpty(),
+            followers = data["NB_FAN"]?.jsonPrimitive?.int,
+            description = this["BIO"]?.jsonObject?.get("RESUME")?.jsonPrimitive?.content?.replace("<p>", "")?.replace("</p>", "").orEmpty(),
             subtitle = this["subtitle"]?.jsonPrimitive?.content.orEmpty(),
             isFollowing = isFollowing
         )
@@ -268,7 +271,7 @@ class DeezerParser(private val session: DeezerSession) {
 
     private fun getCover(md5: String?, type: String?, loaded: Boolean = false): ImageHolder {
         val size = if (loaded) "${quality ?: 240}" else "264"
-        val url = "https://e-cdns-images.dzcdn.net/images/$type/$md5/${size}x${size}-000000-80-0-0.jpg"
+        val url = "https://cdn-images.dzcdn.net/images/$type/$md5/${size}x${size}-000000-80-0-0.jpg"
         return url.toImageHolder()
     }
 }

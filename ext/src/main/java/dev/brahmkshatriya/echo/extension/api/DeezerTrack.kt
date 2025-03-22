@@ -16,7 +16,8 @@ class DeezerTrack(private val deezerApi: DeezerApi, private val json: Json) {
             method = "song.getListData",
             params = buildJsonObject {
                 put("sng_ids", buildJsonArray { tracks.forEach { add(it.id) } })
-            }
+            },
+            np = true
         )
         return json.decodeFromString<JsonObject>(jsonData)
     }
@@ -29,7 +30,8 @@ class DeezerTrack(private val deezerApi: DeezerApi, private val json: Json) {
                 put("tab", "loved")
                 put("nb", 10000)
                 put("start", 0)
-            }
+            },
+            np = true
         )
         return json.decodeFromString<JsonObject>(jsonData)
     }
