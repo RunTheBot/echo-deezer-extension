@@ -10,7 +10,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import okhttp3.Headers
-import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -29,13 +28,6 @@ class DeezerMedia(private val json: Json, private val clientNP: OkHttpClient) {
             add("Host", "media.deezer.com")
             add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
         }.build()
-
-        val url = HttpUrl.Builder()
-            .scheme("https")
-            .host("media.deezer.com")
-            .addPathSegment("v1")
-            .addPathSegment("get_url")
-            .build()
 
         val requestBody = json.encodeToString(
             buildJsonObject {
@@ -56,7 +48,7 @@ class DeezerMedia(private val json: Json, private val clientNP: OkHttpClient) {
         ).toRequestBody("application/json; charset=utf-8".toMediaType())
 
         val request = Request.Builder()
-            .url(url)
+            .url("https://media.deezer.com/v1/get_url")
             .post(requestBody)
             .headers(headers)
             .build()

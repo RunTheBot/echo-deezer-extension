@@ -101,33 +101,28 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
             }
         }
 
-        val initialData = fetchTrackData(track)
-        val loadedTrack = parser.run {
-            initialData.toTrack(loaded = true).copy(extras = track.extras)
-        }
-
-        val hasMp3Misc = loadedTrack.extras["FILESIZE_MP3_MISC"]?.let { it != "0" } ?: false
+        val hasMp3Misc = track.extras["FILESIZE_MP3_MISC"]?.let { it != "0" } ?: false
         val qualityOptions = listOf("flac", "320", "128")
 
         return if (hasMp3Misc) {
-            val mediaJson = api.getMP3MediaUrl(loadedTrack)
+            val mediaJson = api.getMP3MediaUrl(track)
             val trackJsonData = mediaJson["data"]?.jsonArray?.firstOrNull()?.jsonObject
             val mediaIsEmpty = trackJsonData?.get("media")?.jsonArray?.isEmpty() == true
 
             val (finalUrl, _) = if (mediaIsEmpty) {
-                getGeneratedUrl(loadedTrack.id, track, useFallback = false)
+                getGeneratedUrl(track.id, track, useFallback = false)
             } else {
                 extractUrlFromJson(mediaJson) to null
             }
 
-            loadedTrack.copy(
-                isLiked = isTrackLiked(loadedTrack.id),
+            track.copy(
+                isLiked = isTrackLiked(track.id),
                 streamables = listOf(
                     Streamable.server(
                         id = finalUrl,
                         quality = 0,
                         title = "MP3",
-                        extras = mapOf("key" to Utils.createBlowfishKey(loadedTrack.id))
+                        extras = mapOf("key" to Utils.createBlowfishKey(track.id))
                     )
                 )
             )
@@ -136,7 +131,7 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
                 qualityOptions.map { quality ->
                     async(Dispatchers.IO) {
                         try {
-                            val mediaJson = api.getMediaUrl(loadedTrack, quality)
+                            val mediaJson = api.getMediaUrl(track, quality)
                             val trackJsonData = mediaJson["data"]?.jsonArray?.firstOrNull()?.jsonObject
                             val mediaIsEmpty = trackJsonData?.get("media")?.jsonArray?.isEmpty() == true
 
@@ -144,13 +139,13 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
                                 mediaJson.toString().contains("Track token has no sufficient rights on requested media") -> {
                                     val fallbackData = fetchTrackData(track)
                                     val fallbackParsed = parser.run {
-                                        fallbackData.toTrack(loaded = true, fallback = true).copy(extras = track.extras)
+                                        fallbackData.toTrack(fallback = true).copy(extras = track.extras)
                                     }
                                     val fallbackMediaJson = api.getMediaUrl(fallbackParsed, quality)
                                     extractUrlFromJson(fallbackMediaJson) to fallbackParsed
                                 }
                                 mediaIsEmpty -> {
-                                    getGeneratedUrl(loadedTrack.id, track, useFallback = true)
+                                    getGeneratedUrl(track.id, track, useFallback = true)
                                 }
                                 else -> extractUrlFromJson(mediaJson) to null
                             }
@@ -169,17 +164,17 @@ class DeezerTrackClient(private val api: DeezerApi, private val parser: DeezerPa
                                     "128" -> "128kbps"
                                     else -> "UNKNOWN"
                                 },
-                                extras = mapOf("key" to Utils.createBlowfishKey(fallbackTrack?.id ?: loadedTrack.id))
+                                extras = mapOf("key" to Utils.createBlowfishKey(fallbackTrack?.id ?: track.id))
                             )
                         } catch (e: Exception) {
-                            null
+                            throw Exception("$quality not available")
                         }
                     }
-                }.awaitAll().filterNotNull()
+                }.awaitAll()
             }
 
-            loadedTrack.copy(
-                isLiked = isTrackLiked(loadedTrack.id),
+            track.copy(
+                isLiked = isTrackLiked(track.id),
                 streamables = streamables
             )
         }

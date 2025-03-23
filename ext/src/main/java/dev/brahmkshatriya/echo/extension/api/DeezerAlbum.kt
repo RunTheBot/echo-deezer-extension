@@ -27,7 +27,7 @@ class DeezerAlbum(private val deezerApi: DeezerApi, private val json: Json) {
             params = buildJsonObject {
                 put("user_id", userId)
                 put("tab", "albums")
-                put("nb", 50)
+                put("nb", 10000)
             }
         )
         return json.decodeFromString<JsonObject>(jsonData)

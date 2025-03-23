@@ -110,7 +110,7 @@ class DeezerArtistClient(private val api: DeezerApi, private val parser: DeezerP
         val resultsObject =
             jsonObject["results"]?.jsonObject ?: return artist
         val isFollowing = isFollowingArtist(artist.id)
-        return parser.run { resultsObject.toArtist(isFollowing, true) }
+        return parser.run { resultsObject.toArtist(isFollowing) }
     }
 
     private suspend fun isFollowingArtist(id: String): Boolean {

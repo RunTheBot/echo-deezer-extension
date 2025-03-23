@@ -32,7 +32,7 @@ class DeezerPlaylistClient(private val api: DeezerApi, private val parser: Deeze
         DeezerExtension().handleArlExpiration()
         val jsonObject = api.playlist(playlist)
         val resultsObject = jsonObject["results"]!!.jsonObject
-        return parser.run { resultsObject.toPlaylist(true) }
+        return parser.run { resultsObject.toPlaylist() }
     }
 
     fun loadTracks(playlist: Playlist): PagedData<Track> = PagedData.Single {
@@ -40,7 +40,7 @@ class DeezerPlaylistClient(private val api: DeezerApi, private val parser: Deeze
         val jsonObject = api.playlist(playlist)
         val dataArray = jsonObject["results"]!!.jsonObject["SONGS"]!!.jsonObject["data"]!!.jsonArray
         dataArray.mapIndexed { index, song ->
-            val currentTrack = parser.run { song.jsonObject.toTrack(true) }
+            val currentTrack = parser.run { song.jsonObject.toTrack() }
             val nextTrack = parser.run { dataArray.getOrNull(index + 1)?.jsonObject?.toTrack() }
             currentTrack.copy(
                 extras = currentTrack.extras + mapOf(

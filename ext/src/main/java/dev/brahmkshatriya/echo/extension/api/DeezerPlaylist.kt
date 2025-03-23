@@ -33,7 +33,7 @@ class DeezerPlaylist(private val deezerApi: DeezerApi, private val json: Json) {
             params = buildJsonObject {
                 put("user_id", userId)
                 put ("tab", "playlists")
-                put("nb", 100)
+                put("nb", 10000)
             }
         )
         return json.decodeFromString<JsonObject>(jsonData)

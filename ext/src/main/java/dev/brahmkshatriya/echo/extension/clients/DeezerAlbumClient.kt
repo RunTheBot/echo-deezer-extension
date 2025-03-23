@@ -16,11 +16,11 @@ class DeezerAlbumClient(private val api: DeezerApi, private val parser: DeezerPa
         if (album.extras["__TYPE__"] == "show") {
             val jsonObject = api.show(album)
             val resultsObject = jsonObject["results"]!!.jsonObject
-            return parser.run { resultsObject.toShow(true) }
+            return parser.run { resultsObject.toShow() }
         } else {
             val jsonObject = api.album(album)
             val resultsObject = jsonObject["results"]!!.jsonObject
-            return parser.run { resultsObject.toAlbum(true) }
+            return parser.run { resultsObject.toAlbum() }
         }
     }
 
@@ -43,7 +43,7 @@ class DeezerAlbumClient(private val api: DeezerApi, private val parser: DeezerPa
             val songsObject = resultsObject["SONGS"]!!.jsonObject
             val dataArray = songsObject["data"]!!.jsonArray
             dataArray.mapIndexed { index, song ->
-                val currentTrack = parser.run { song.jsonObject.toTrack(true) }
+                val currentTrack = parser.run { song.jsonObject.toTrack() }
                 val nextTrack = parser.run { dataArray.getOrNull(index + 1)?.jsonObject?.toTrack() }
                 currentTrack.copy(
                     extras = currentTrack.extras + mapOf(
