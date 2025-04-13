@@ -100,7 +100,7 @@ class DeezerArtistClient(private val api: DeezerApi, private val parser: DeezerP
                 } else null
             }
         } catch (e: Exception) {
-            emptyList()
+            throw e
         }
     }
 

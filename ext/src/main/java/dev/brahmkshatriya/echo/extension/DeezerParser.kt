@@ -97,21 +97,22 @@ class DeezerParser(private val session: DeezerSession) {
 
     fun JsonObject.toEchoMediaItem(): EchoMediaItem? {
         val data = this["data"]?.jsonObject ?: this
-        val type = data["__TYPE__"]?.jsonPrimitive?.content ?: return null
-        return when {
-            "playlist" in type -> EchoMediaItem.Lists.PlaylistItem(toPlaylist())
-            "album" in type -> EchoMediaItem.Lists.AlbumItem(toAlbum())
-            "song" in type -> EchoMediaItem.TrackItem(toTrack())
-            "artist" in type -> EchoMediaItem.Profile.ArtistItem(toArtist(isShelfItem = true))
-            "show" in type -> EchoMediaItem.Lists.AlbumItem(toShow())
-            "episode" in type -> EchoMediaItem.TrackItem(toEpisode())
-            "flow" in type -> EchoMediaItem.Lists.RadioItem(toRadio())
-            else -> null
+        return data["__TYPE__"]?.jsonPrimitive?.content?.let { type ->
+            when {
+                "playlist" in type -> EchoMediaItem.Lists.PlaylistItem(toPlaylist())
+                "album" in type -> EchoMediaItem.Lists.AlbumItem(toAlbum())
+                "song" in type -> EchoMediaItem.TrackItem(toTrack())
+                "artist" in type -> EchoMediaItem.Profile.ArtistItem(toArtist(isShelfItem = true))
+                "show" in type -> EchoMediaItem.Lists.AlbumItem(toShow())
+                "episode" in type -> EchoMediaItem.TrackItem(toEpisode())
+                "flow" in type -> EchoMediaItem.Lists.RadioItem(toRadio())
+                else -> null
+            }
         }
     }
 
     fun JsonObject.toShow(): Album {
-        val data = this["data"]?.jsonObject ?: this["DATA"]?.jsonObject ?: this
+        val data = unwrap()
         val md5 = data["SHOW_ART_MD5"]?.jsonPrimitive?.content.orEmpty()
         return Album(
             id = data["SHOW_ID"]?.jsonPrimitive?.content.orEmpty(),
@@ -125,7 +126,7 @@ class DeezerParser(private val session: DeezerSession) {
     }
 
     fun JsonObject.toEpisode(): Track {
-        val data = this["data"]?.jsonObject ?: this["DATA"]?.jsonObject ?: this
+        val data = unwrap()
         val md5 = data["SHOW_ART_MD5"]?.jsonPrimitive?.content.orEmpty()
         val title = data["EPISODE_TITLE"]?.jsonPrimitive?.content.orEmpty()
         return Track(
@@ -151,7 +152,7 @@ class DeezerParser(private val session: DeezerSession) {
     }
 
     fun JsonObject.toAlbum(): Album {
-        val data = this["data"]?.jsonObject ?: this["DATA"]?.jsonObject ?: this
+        val data = unwrap()
         val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content.orEmpty()
         val artistArray = data["ARTISTS"]?.jsonArray.orEmpty()
         val tracks = this["SONGS"]?.jsonObject?.get("total")?.jsonPrimitive?.int
@@ -175,22 +176,17 @@ class DeezerParser(private val session: DeezerSession) {
     }
 
     fun JsonObject.toArtist(isFollowing: Boolean = false, isShelfItem: Boolean = false): Artist {
-        val artistData = if (isShelfItem && this["data"]?.jsonObject == null) this
-        else if (this["DATA"]?.jsonObject?.get("ART_BANNER") == null)
-            this["DATA"]?.jsonObject ?: this["data"]?.jsonObject ?: this
-        else
-            this["data"]?.jsonObject ?: this
+        val artistData = when {
+            isShelfItem && this["data"]?.jsonObject == null -> this
+            this["DATA"]?.jsonObject?.get("ART_BANNER") == null -> this["DATA"]?.jsonObject ?: this["data"]?.jsonObject ?: this
+            else -> this["data"]?.jsonObject ?: this
+        }
         val md5 = artistData["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty()
         val description = if (this["BIO"] is JsonObject) {
-            val bioObj = this["BIO"]!!.jsonObject
-            val bioText = bioObj["BIO"]?.jsonPrimitive?.content.orEmpty()
-                .replace("<br />", "")
-                .replace("\\n", "")
-            val resumeText = bioObj["RESUME"]?.jsonPrimitive?.content.orEmpty()
-                .replace("<p>", "")
-                .replace("</p>", "")
-            bioText + resumeText
-        } else { "" }
+            val bio = this["BIO"]!!.jsonObject
+            (bio["BIO"]?.jsonPrimitive?.content.orEmpty().replace("<br />", "").replace("\\n", "")) +
+                    (bio["RESUME"]?.jsonPrimitive?.content.orEmpty().replace("<p>", "").replace("</p>", ""))
+        } else ""
         return Artist(
             id = artistData["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
             name = artistData["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
@@ -202,17 +198,11 @@ class DeezerParser(private val session: DeezerSession) {
         )
     }
 
-    @Suppress("NewApi")
-    fun JsonObject.toTrack(fallback: Boolean = false): Track {
+    fun JsonObject.toTrack(): Track {
         val data = this["data"]?.jsonObject ?: this
         val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content.orEmpty()
         val artistArray = data["ARTISTS"]?.jsonArray.orEmpty()
         val version = data["VERSION"]?.jsonPrimitive?.content.orEmpty()
-        val id = if (fallback) {
-            data["FALLBACK"]!!.jsonObject["SNG_ID"]?.jsonPrimitive?.content.orEmpty()
-        } else {
-            data["SNG_ID"]?.jsonPrimitive?.content.orEmpty()
-        }
         val date = data["DATE_ADD"]?.jsonPrimitive?.content
         val releaseData = if (date?.contains("-") == true) {
             date.toDate()
@@ -220,18 +210,24 @@ class DeezerParser(private val session: DeezerSession) {
             date?.toLong()?.toDate()
         }
         return Track(
-            id = id,
+            id = data["SNG_ID"]?.jsonPrimitive?.content.orEmpty(),
             title = data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty() + if(version.isNotEmpty()) { " $version" } else { "" } ,
             cover = getCover(md5, "cover"),
             duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
             releaseDate = releaseData,
-            artists = artistArray.map { artistObject ->
+            artists = if (artistArray.isNotEmpty())
+                artistArray.map { artistObject ->
                 Artist(
                     id = artistObject.jsonObject["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
                     name = artistObject.jsonObject["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
                     cover = getCover(artistObject.jsonObject["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty(), "artist")
                 )
-            },
+            } else listOf(
+                Artist(
+                    id = data.jsonObject["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
+                    name = data.jsonObject["ART_NAME"]?.jsonPrimitive?.content.orEmpty()
+                )
+            ),
             album = Album(
                 id = data["ALB_ID"]?.jsonPrimitive?.content.orEmpty(),
                 title = data["ALB_TITLE"]?.jsonPrimitive?.content.orEmpty(),
@@ -239,6 +235,7 @@ class DeezerParser(private val session: DeezerSession) {
             ),
             isExplicit = data["EXPLICIT_LYRICS"]?.jsonPrimitive?.content?.equals("1") ?: false,
             extras = mapOf(
+                "FALLBACK_ID" to data["FALLBACK"]?.jsonObject?.get("SNG_ID")?.jsonPrimitive?.content.orEmpty(),
                 "TRACK_TOKEN" to data["TRACK_TOKEN"]?.jsonPrimitive?.content.orEmpty(),
                 "FILESIZE_MP3_MISC" to (data["FILESIZE_MP3_MISC"]?.jsonPrimitive?.content ?: "0"),
                 "MD5" to md5,
@@ -247,37 +244,35 @@ class DeezerParser(private val session: DeezerSession) {
         )
     }
 
-    @Suppress("NewApi")
     fun JsonObject.toPlaylist(): Playlist {
-        val data = this["data"]?.jsonObject ?: this["DATA"]?.jsonObject ?: this
+        val data = unwrap()
         val type = data["PICTURE_TYPE"]?.jsonPrimitive?.content.orEmpty()
         val md5 = data["PLAYLIST_PICTURE"]?.jsonPrimitive?.content.orEmpty()
+        val userID = data["PARENT_USER_ID"]?.jsonPrimitive?.content
+        val userSID = session.credentials?.userId
         return Playlist(
             id = data["PLAYLIST_ID"]?.jsonPrimitive?.content.orEmpty(),
             title = data["TITLE"]?.jsonPrimitive?.content.orEmpty(),
             cover = getCover(md5, type),
             description = data["DESCRIPTION"]?.jsonPrimitive?.content.orEmpty(),
             subtitle = this["subtitle"]?.jsonPrimitive?.content,
-            isEditable = data["PARENT_USER_ID"]?.jsonPrimitive?.content == session.credentials?.userId,
+            isEditable = userID?.contains(userSID.orEmpty()) == true,
             tracks = data["NB_SONG"]?.jsonPrimitive?.int ?: 0,
             creationDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toDate(),
         )
     }
 
-    private fun String.toDate(): EchoDate {
-       return EchoDate(
-            year = substringBefore("-").toInt(),
-            month = substringAfter("-").substringBeforeLast("-").toInt(),
-            day = substringAfterLast("-").substringBefore(" ").toInt()
-        )
-    }
+    private fun String.toDate(): EchoDate = EchoDate(
+        year = substringBefore("-").toInt(),
+        month = substringAfter("-").substringBeforeLast("-").toInt(),
+        day = substringAfterLast("-").substringBefore(" ").toInt()
+    )
 
     private fun Long.toDate(): EchoDate {
         val date = Date(this * 1000)
         val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         return formatter.format(date).toDate()
     }
-
 
     private fun JsonObject.toRadio(): Radio {
         val data = this["data"]?.jsonObject ?: this
@@ -302,4 +297,6 @@ class DeezerParser(private val session: DeezerSession) {
         val url = "https://cdn-images.dzcdn.net/images/$type/$md5/${size}x${size}-000000-80-0-0.jpg"
         return url.toImageHolder()
     }
+
+    private fun JsonObject.unwrap(): JsonObject = this["data"]?.jsonObject ?: this["DATA"]?.jsonObject ?: this
 }

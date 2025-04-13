@@ -199,6 +199,10 @@ fun getByteStreamAudio(
     ).toMedia()
 }
 
+/**
+ * Seems Deezer ditched this way of getting songs.
+ * Will leave it for now.
+ */
 @Suppress("NewApi", "GetInstance")
 fun generateTrackUrl(trackId: String, md5Origin: String, mediaVersion: String, quality: Int): String {
     val magicByte = 164

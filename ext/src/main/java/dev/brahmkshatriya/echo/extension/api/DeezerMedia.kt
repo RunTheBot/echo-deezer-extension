@@ -61,9 +61,9 @@ class DeezerMedia(private val json: Json, private val clientNP: OkHttpClient) {
 
     fun getMediaUrl(track: Track, quality: String): JsonObject {
         val formats = when (quality) {
-            "128" -> arrayOf("MP3_128", "MP3_64", "MP3_MISC")
-            "flac" -> arrayOf("FLAC", "MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
-            else -> arrayOf("MP3_320", "MP3_128", "MP3_64", "MP3_MISC")
+            "128" -> arrayOf("MP3_128")
+            "flac" -> arrayOf("FLAC")
+            else -> arrayOf("MP3_320")
         }
 
         val requestBody = json.encodeToString(

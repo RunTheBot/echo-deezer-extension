@@ -221,9 +221,9 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         }
     }
 
-    override suspend fun listEditablePlaylists(): List<Playlist> {
+    override suspend fun listEditablePlaylists(track: Track?): List<Pair<Playlist, Boolean>> {
         handleArlExpiration()
-        val playlistList = mutableListOf<Playlist>()
+        val playlistList = mutableListOf<Pair<Playlist, Boolean>>()
         val jsonObject = api.getPlaylists()
         val resultObject = jsonObject["results"]!!.jsonObject
         val tabObject = resultObject["TAB"]!!.jsonObject
@@ -232,7 +232,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         dataArray.map {
             val playlist = parser.run { it.jsonObject.toPlaylist() }
             if (playlist.isEditable) {
-                playlistList.add(playlist)
+                playlistList.add(Pair(playlist, false))
             }
 
         }
@@ -327,7 +327,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Play =============>
 
-    private val deezerTrackClient = DeezerTrackClient(api, parser)
+    private val deezerTrackClient = DeezerTrackClient(api)
 
     override suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media = deezerTrackClient.loadStreamableMedia(streamable, isDownload)
 
