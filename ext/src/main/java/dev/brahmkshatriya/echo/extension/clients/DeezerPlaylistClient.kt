@@ -14,7 +14,7 @@ import kotlinx.serialization.json.jsonObject
 class DeezerPlaylistClient(private val api: DeezerApi, private val parser: DeezerParser) {
 
     fun getShelves(playlist: Playlist): PagedData.Single<Shelf> = PagedData.Single {
-        DeezerExtension().handleArlExpiration()
+        /*DeezerExtension().handleArlExpiration()
         val jsonObject = api.playlist(playlist)
         val resultsObject = jsonObject["results"]!!.jsonObject
         val songsObject = resultsObject["SONGS"]!!.jsonObject
@@ -24,7 +24,7 @@ class DeezerPlaylistClient(private val api: DeezerApi, private val parser: Deeze
                 song.jsonObject.toShelfItemsList(name = "")
             }
         }
-        //data
+        //data*/
         emptyList()
     }
 
