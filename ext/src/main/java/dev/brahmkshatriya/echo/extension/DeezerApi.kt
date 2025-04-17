@@ -339,7 +339,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     private val deezerMedia = DeezerMedia(json, clientNP)
 
-    fun getMP3MediaUrl(track: Track): JsonObject = deezerMedia.getMP3MediaUrl(track, language, arl, sid, licenseToken)
+    fun getMP3MediaUrl(track: Track, fallBack: Boolean = false): JsonObject = deezerMedia.getMP3MediaUrl(track, language, arl, sid, licenseToken, fallBack)
 
     fun getMediaUrl(track: Track, quality: String): JsonObject = deezerMedia.getMediaUrl(track, quality)
 
