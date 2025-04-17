@@ -17,7 +17,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 class DeezerMedia(private val json: Json, private val clientNP: OkHttpClient) {
 
-    fun getMP3MediaUrl(track: Track, language: String, arl: String, sid: String, licenseToken: String, fallBack: Boolean): JsonObject {
+    fun getMP3MediaUrl(track: Track, language: String, arl: String, sid: String, licenseToken: String): JsonObject {
         val headers = Headers.Builder().apply {
             add("Accept-Encoding", "gzip")
             add("Accept-Language", language.substringBefore("-"))
@@ -38,7 +38,7 @@ class DeezerMedia(private val json: Json, private val clientNP: OkHttpClient) {
                         putJsonArray("formats") {
                             add(buildJsonObject {
                                 put("cipher", "BF_CBC_STRIPE")
-                                put("format", if(fallBack) "MP3_128" else "MP3_MISC")
+                                put("format", "MP3_MISC")
                             })
                         }
                     })

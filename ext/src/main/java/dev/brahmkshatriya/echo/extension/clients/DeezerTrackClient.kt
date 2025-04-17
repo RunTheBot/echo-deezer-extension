@@ -97,22 +97,6 @@ class DeezerTrackClient(private val api: DeezerApi) {
                             url to fallbackParsed
                         }
 
-                        mediaJson.toString().contains("License token has no sufficient rights on requested media") && quality == "128" -> {
-                            val fMediaJson = api.getMP3MediaUrl(track, true)
-                            println("FUCK YOU $fMediaJson")
-                            if (fMediaJson.toString().contains("An error occurred while decoding track token.")) {
-                                val fallbackParsed = track.copy(id = track.extras["FALLBACK_ID"].orEmpty())
-                                val fallbackMediaJson = api.getMP3MediaUrl(fallbackParsed, true)
-                                println("FUCK YOU 1 $fallbackMediaJson")
-                                val url = extractUrlFromJson(fallbackMediaJson) ?: return null
-                                url to fallbackParsed
-                            } else {
-                                val url = extractUrlFromJson(fMediaJson) ?: return null
-                                url to null
-
-                            }
-                        }
-
                         else -> {
                             val url = extractUrlFromJson(mediaJson) ?: return null
                             url to null
