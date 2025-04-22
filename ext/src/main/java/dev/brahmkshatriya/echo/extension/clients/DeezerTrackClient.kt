@@ -61,7 +61,7 @@ class DeezerTrackClient(private val api: DeezerApi) {
         val isMp3Misc = track.extras["FILESIZE_MP3_MISC"]?.let { it != "0" } ?: false
 
         return if (isMp3Misc) {
-            val mediaJson = api.getMP3MediaUrl(track)
+            val mediaJson = api.getMP3MediaUrl(track, false)
             val finalUrl = extractUrlFromJson(mediaJson)
 
             if (finalUrl == null) {
@@ -85,7 +85,7 @@ class DeezerTrackClient(private val api: DeezerApi) {
             fun createStreamableForQuality(quality: String): Streamable? {
                 return try {
                     val currentTrackId = track.id
-                    val mediaJson = api.getMediaUrl(track, quality)
+                    val mediaJson = if(quality != "128") api.getMediaUrl(track, quality) else api.getMP3MediaUrl(track, true)
                     val trackJsonData = mediaJson["data"]?.jsonArray?.firstOrNull()?.jsonObject
                     val mediaIsEmpty = trackJsonData?.get("media")?.jsonArray?.isEmpty() == true
 
