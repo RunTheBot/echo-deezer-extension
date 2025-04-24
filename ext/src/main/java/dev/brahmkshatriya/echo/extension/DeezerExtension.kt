@@ -412,12 +412,16 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override val loginWebViewStopUrlRegex = "https://www\\.deezer\\.com/account/.*".toRegex()
 
-    override suspend fun onLoginWebviewStop(url: String, data: String): List<User> {
-        val arl = extractCookieValue(data, "arl")
-        val sid = extractCookieValue(data, "sid")
+    override suspend fun onLoginWebviewStop(url: String, data: Map<String, String>): List<User> {
+        val fData = data.values.first()
+        println("FUCK YOU $fData")
+        val arl = extractCookieValue(fData, "arl")
+        val sid = extractCookieValue(fData, "sid")
         if (arl != null && sid != null) {
             session.updateCredentials(arl = arl, sid = sid)
             return api.makeUser()
+        } else if (fData.isEmpty()) {
+            throw Exception("Ignore this")
         } else {
             throw Exception("Failed to retrieve ARL and SID from cookies")
         }
