@@ -24,18 +24,18 @@ class DeezerArtistClient(private val api: DeezerApi, private val parser: DeezerP
                 mapOf(
                     "TOP" to { jObject ->
                         val shelf =
-                            jObject["data"]?.jsonArray?.toShelfItemsList("Top") as Shelf.Lists.Items
-                        val list = shelf.list as List<EchoMediaItem.TrackItem>
+                            jObject["data"]?.jsonArray?.toShelfItemsList("Top") as? Shelf.Lists.Items
+                        val list = shelf?.list as? List<EchoMediaItem.TrackItem>
                         Shelf.Lists.Tracks(
-                            title = shelf.title,
-                            list = list.map { it.track }.take(5),
-                            subtitle = shelf.subtitle,
+                            title = shelf?.title.orEmpty(),
+                            list = list?.map { it.track }?.take(5) ?: emptyList(),
+                            subtitle = shelf?.subtitle,
                             type = Shelf.Lists.Type.Linear,
                             isNumbered = true,
                             more = PagedData.Single {
-                                list.map {
+                                list?.map {
                                     it.track
-                                }
+                                } ?: emptyList()
                             }
 
                         )
@@ -50,34 +50,34 @@ class DeezerArtistClient(private val api: DeezerApi, private val parser: DeezerP
                         jObject["data"]?.jsonArray?.toShelfItemsList("Related Playlists")
                     },
                     "RELATED_ARTISTS" to { jObject ->
-                        val shelf = jObject["data"]?.jsonArray?.toShelfItemsList("Related Artists") as Shelf.Lists.Items
-                        val list = shelf.list
+                        val shelf = jObject["data"]?.jsonArray?.toShelfItemsList("Related Artists") as? Shelf.Lists.Items
+                        val list = shelf?.list
                         Shelf.Lists.Items(
-                            title = shelf.title,
-                            subtitle = shelf.subtitle,
+                            title = shelf?.title.orEmpty(),
+                            subtitle = shelf?.subtitle,
                             type = Shelf.Lists.Type.Linear,
                             more = PagedData.Single {
-                                list.map {
+                                list?.map {
                                     it
-                                }
+                                } ?: emptyList()
                             },
-                            list = list
+                            list = list ?: emptyList()
                         )
                     },
                     "ALBUMS" to { jObject ->
                         val shelf =
-                            jObject["data"]?.jsonArray?.toShelfItemsList("Albums") as Shelf.Lists.Items
-                        val list = shelf.list
+                            jObject["data"]?.jsonArray?.toShelfItemsList("Albums") as? Shelf.Lists.Items
+                        val list = shelf?.list
                         Shelf.Lists.Items(
-                            title = shelf.title,
-                            subtitle = shelf.subtitle,
+                            title = shelf?.title.orEmpty(),
+                            subtitle = shelf?.subtitle,
                             type = Shelf.Lists.Type.Linear,
                             more = PagedData.Single {
-                                list.map {
+                                list?.map {
                                     it
-                                }
+                                } ?: emptyList()
                             },
-                            list = list
+                            list = list ?: emptyList()
                         )
                     }
                 )
