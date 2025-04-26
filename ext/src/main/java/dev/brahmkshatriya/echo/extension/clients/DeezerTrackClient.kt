@@ -80,7 +80,7 @@ class DeezerTrackClient(private val api: DeezerApi) {
                 )
             }
         } else {
-            val qualityOptions = listOf(/*"flac", "320",*/ "128")
+            val qualityOptions = listOf("flac", "320", "128")
 
             fun createStreamableForQuality(quality: String): Streamable? {
                 return try {

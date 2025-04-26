@@ -20,6 +20,7 @@ kotlin {
 dependencies {
     val libVersion: String by project
     compileOnly("com.github.brahmkshatriya:echo:$libVersion")
+    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
 }
 
 val extType: String by project

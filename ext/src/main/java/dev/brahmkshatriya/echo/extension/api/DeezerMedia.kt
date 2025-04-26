@@ -74,7 +74,7 @@ class DeezerMedia(private val json: Json, private val clientNP: OkHttpClient) {
         ).toRequestBody("application/json; charset=utf-8".toMediaType())
 
         val request = Request.Builder()
-            .url("https://dzmedia.fly.dev/get_url")
+            .url("https://lufts-dzmedia.fly.dev/get_url")
             .post(requestBody)
             .build()
 
