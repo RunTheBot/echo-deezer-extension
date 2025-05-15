@@ -5,6 +5,7 @@ import dev.brahmkshatriya.echo.common.clients.ArtistClient
 import dev.brahmkshatriya.echo.common.clients.ArtistFollowClient
 import dev.brahmkshatriya.echo.common.clients.HomeFeedClient
 import dev.brahmkshatriya.echo.common.clients.LibraryFeedClient
+import dev.brahmkshatriya.echo.common.clients.LoginClient.InputField
 import dev.brahmkshatriya.echo.common.clients.LoginClient
 import dev.brahmkshatriya.echo.common.clients.LyricsClient
 import dev.brahmkshatriya.echo.common.clients.PlaylistClient
@@ -60,7 +61,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClient,
     SearchFeedClient, AlbumClient, ArtistClient, ArtistFollowClient, PlaylistClient, LyricsClient, ShareClient,
-    TrackerClient, LoginClient.WebView.Cookie, LoginClient.UsernamePassword, LoginClient.CustomTextInput,
+    TrackerClient, LoginClient.WebView.Cookie, LoginClient.CustomInput,
     LibraryFeedClient, PlaylistEditClient, SaveToLibraryClient {
 
     private val session = DeezerSession.getInstance()
@@ -431,32 +432,53 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         return data.substringAfter("$key=").substringBefore(";").takeIf { it.isNotEmpty() }
     }
 
-    override val loginInputFields: List<LoginClient.InputField>
-        get() = listOf(
-            LoginClient.InputField(
+    override val loginInputFields: List<InputField> = listOf(
+            InputField(
+                type = InputField.Type.Misc,
                 key = "arl",
                 label = "ARL",
                 isRequired = false,
-                isPassword = true
-
+            ),
+            InputField(
+                type = InputField.Type.Email,
+                key = "email",
+                label = "E-Mail",
+                isRequired = true,
+            ),
+            InputField(
+                type = InputField.Type.Password,
+                key = "pass",
+                label = "Password",
+                isRequired = true
             )
         )
 
     override suspend fun onLogin(data: Map<String, String?>): List<User> {
-        session.updateCredentials(arl = data["arl"] ?: "")
-        api.getSid()
-        val userList = api.makeUser()
-        return userList
+        if(data["email"] != null && data["pass"] != null) {
+            val email = data["email"]!!
+            val password = data["pass"]!!
+
+            session.updateCredentials(email = email, pass = password)
+
+            api.getArlByEmail(email, password, 3)
+            val userList = api.makeUser(email, password)
+            return userList
+        } else {
+            session.updateCredentials(arl = data["arl"] ?: "")
+            api.getSid()
+            val userList = api.makeUser()
+            return userList
+        }
     }
 
-    override suspend fun onLogin(username: String, password: String): List<User> {
+    /*override suspend fun onLogin(username: String, password: String): List<User> {
         // Set shared credentials
         session.updateCredentials(email = username, pass = password)
 
         api.getArlByEmail(username, password, 3)
         val userList = api.makeUser(username, password)
         return userList
-    }
+    }*/
 
     override suspend fun onSetLoginUser(user: User?) {
         if (user != null) {

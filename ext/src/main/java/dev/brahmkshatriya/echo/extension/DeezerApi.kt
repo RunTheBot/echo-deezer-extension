@@ -216,7 +216,7 @@ class DeezerApi(private val session: DeezerSession) {
                     throw Exception("Please re-login (Best use User + Pass method)")
                 } else {
                     session.isArlExpired(false)
-                    val userList = DeezerExtension().onLogin(email, pass)
+                    val userList = DeezerExtension().onLogin(mapOf(Pair("email", email), Pair("pass", pass)))
                     DeezerExtension().onSetLoginUser(userList.first())
                     return@withContext callApi(method, params, gatewayInput)
                 }
