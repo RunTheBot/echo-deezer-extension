@@ -1,6 +1,8 @@
 package dev.brahmkshatriya.echo.extension.api
 
 import dev.brahmkshatriya.echo.extension.DeezerApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -18,7 +20,9 @@ class DeezerSearch(private val deezerApi: DeezerApi, private val json: Json) {
                 put("start", 0)
             }
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     suspend fun searchSuggestions(query: String): JsonObject {
@@ -28,7 +32,9 @@ class DeezerSearch(private val deezerApi: DeezerApi, private val json: Json) {
                 put("QUERY", query)
             }
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     suspend fun setSearchHistory(query: String) {
@@ -47,7 +53,9 @@ class DeezerSearch(private val deezerApi: DeezerApi, private val json: Json) {
         val jsonData = deezerApi.callApi(
             method = "deezer.userMenu"
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     suspend fun deleteSearchHistory(userId: String) {

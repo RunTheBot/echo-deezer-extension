@@ -2,6 +2,8 @@ package dev.brahmkshatriya.echo.extension.api
 
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.extension.DeezerApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -18,7 +20,9 @@ class DeezerAlbum(private val deezerApi: DeezerApi, private val json: Json) {
                 put("lang", language.substringBefore("-"))
             }
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     suspend fun getAlbums(userId: String): JsonObject {
@@ -30,7 +34,9 @@ class DeezerAlbum(private val deezerApi: DeezerApi, private val json: Json) {
                 put("nb", 10000)
             }
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     suspend fun addFavoriteAlbum(id: String) {

@@ -140,8 +140,8 @@ class DeezerApi(private val session: DeezerSession) {
     private val clientLog: OkHttpClient by lazy { createOkHttpClient(useProxy = true , true) }
     private val clientNP: OkHttpClient by lazy { createOkHttpClient(useProxy = false) }
 
-    private fun getHeaders(method: String? = ""): Headers {
-        return Headers.Builder().apply {
+    private val staticHeaders: Headers by lazy {
+        Headers.Builder().apply {
             add("Accept", "*/*")
             add("Accept-Charset", "utf-8,ISO-8859-1;q=0.7,*;q=0.3")
             add("Accept-Encoding", "gzip")
@@ -153,6 +153,11 @@ class DeezerApi(private val session: DeezerSession) {
             add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
             add("X-User-IP", "1.1.1.1")
             add("x-deezer-client-ip", "1.1.1.1")
+        }.build()
+    }
+
+    private fun getHeaders(method: String? = ""): Headers {
+        return staticHeaders.newBuilder().apply {
             if (method != "user.getArl") {
                 add("Cookie", "arl=$arl; sid=$sid")
             } else {
@@ -168,10 +173,8 @@ class DeezerApi(private val session: DeezerSession) {
         np: Boolean = false
     ): String = withContext(Dispatchers.IO) {
         val url = HttpUrl.Builder()
-            .scheme("https")
-            .host("www.deezer.com")
-            .addPathSegment("ajax")
-            .addPathSegment("gw-light.php")
+            .scheme("https").host("www.deezer.com")
+            .addPathSegments("ajax/gw-light.php")
             .addQueryParameter("method", method)
             .addQueryParameter("input", "3")
             .addQueryParameter("api_version", "1.0")
@@ -407,7 +410,9 @@ class DeezerApi(private val session: DeezerSession) {
                 put("user_id", userId)
             }
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     suspend fun getShows(): JsonObject {
@@ -419,7 +424,9 @@ class DeezerApi(private val session: DeezerSession) {
                 put("nb", 2000)
             }
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     //<============= Playlists =============>
@@ -467,7 +474,9 @@ class DeezerApi(private val session: DeezerSession) {
                 {"PAGE":"$page","VERSION":"2.5","SUPPORT":{"ads":[],"deeplink-list":["deeplink"],"event-card":["live-event"],"grid-preview-one":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid-preview-two":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-list":["track","song"],"item-highlight":["radio"],"large-card":["album","external-link","playlist","show","video-link"],"list":["episode"],"mini-banner":["external-link"],"slideshow":["album","artist","channel","external-link","flow","livestream","playlist","show","smarttracklist","user","video-link"],"small-horizontal-grid":["flow"],"long-card-horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"filterable-grid":["flow"]},"LANG":"${language.substringBefore("-")}","OPTIONS":["deeplink_newsandentertainment","deeplink_subscribeoffer"]}
             """.trimIndent()
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     //<============= Lyrics =============>

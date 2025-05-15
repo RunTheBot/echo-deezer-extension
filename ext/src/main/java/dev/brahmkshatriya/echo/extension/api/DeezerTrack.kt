@@ -2,6 +2,8 @@ package dev.brahmkshatriya.echo.extension.api
 
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -19,7 +21,9 @@ class DeezerTrack(private val deezerApi: DeezerApi, private val json: Json) {
             },
             np = true
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     suspend fun getTracks(userId: String): JsonObject {
@@ -33,7 +37,9 @@ class DeezerTrack(private val deezerApi: DeezerApi, private val json: Json) {
             },
             np = true
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     suspend fun addFavoriteTrack(id: String) {

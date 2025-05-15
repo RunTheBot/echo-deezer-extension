@@ -20,10 +20,11 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
 import java.net.URLDecoder
+import java.util.concurrent.ConcurrentHashMap
 
 object LocalAudioServer {
 
-    private val trackMap = mutableMapOf<String, Pair<Streamable, String>>()
+    private val trackMap = ConcurrentHashMap<String, Pair<Streamable, String>>()
     private var serverSocket: ServerSocket? = null
     private var serverJob: Job? = null
     private val lock = Any()
@@ -37,7 +38,7 @@ object LocalAudioServer {
     private fun startServerIfNeeded(scope: CoroutineScope) {
         synchronized(lock) {
             if (serverSocket == null) {
-                serverSocket = ServerSocket(0, 50) // backlog=50
+                serverSocket = ServerSocket(0, 50)
                 usedPort = serverSocket!!.localPort
 
                 serverJob = scope.launch(Dispatchers.IO) {
@@ -54,15 +55,6 @@ object LocalAudioServer {
                     }
                 }
             }
-        }
-    }
-
-    fun stopServer() {
-        synchronized(lock) {
-            serverJob?.cancel()
-            serverJob = null
-            serverSocket?.closeQuietly()
-            serverSocket = null
         }
     }
 

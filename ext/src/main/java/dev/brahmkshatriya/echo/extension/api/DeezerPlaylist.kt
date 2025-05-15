@@ -3,7 +3,9 @@ package dev.brahmkshatriya.echo.extension.api
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -24,7 +26,9 @@ class DeezerPlaylist(private val deezerApi: DeezerApi, private val json: Json) {
                 put("start", 0)
             }
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     suspend fun getPlaylists(userId: String): JsonObject {
@@ -36,7 +40,9 @@ class DeezerPlaylist(private val deezerApi: DeezerApi, private val json: Json) {
                 put("nb", 10000)
             }
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     suspend fun addFavoritePlaylist(id: String) {
@@ -98,7 +104,9 @@ class DeezerPlaylist(private val deezerApi: DeezerApi, private val json: Json) {
                 put("status", 0)
             }
         )
-        return json.decodeFromString<JsonObject>(jsonData)
+        return withContext(Dispatchers.Default) {
+            json.decodeFromString<JsonObject>(jsonData)
+        }
     }
 
     suspend fun deletePlaylist(id: String) {
