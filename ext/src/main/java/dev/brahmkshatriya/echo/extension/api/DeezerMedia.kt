@@ -1,6 +1,8 @@
 package dev.brahmkshatriya.echo.extension.api
 
+import dev.brahmkshatriya.echo.common.helpers.ContinuationCallback.Companion.await
 import dev.brahmkshatriya.echo.common.models.Track
+import dev.brahmkshatriya.echo.extension.DeezerApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -15,19 +17,24 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-class DeezerMedia(private val json: Json, private val clientNP: OkHttpClient) {
+class DeezerMedia(private val deezerApi: DeezerApi, private val json: Json, private val clientNP: OkHttpClient) {
 
-    fun getMP3MediaUrl(track: Track, language: String, arl: String, sid: String, licenseToken: String, is128: Boolean): JsonObject {
-        val headers = Headers.Builder().apply {
-            add("Accept-Encoding", "gzip")
-            add("Accept-Language", language.substringBefore("-"))
-            add("Cache-Control", "max-age=0")
-            add("Connection", "Keep-alive")
-            add("Content-Type", "application/json; charset=utf-8")
-            add("Cookie", "arl=$arl&sid=$sid")
-            add("Host", "media.deezer.com")
-            add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
-        }.build()
+    suspend fun getMP3MediaUrl(track: Track, language: String, arl: String, sid: String, licenseToken: String, is128: Boolean): JsonObject {
+        val headers by lazy {
+            Headers.Builder().apply {
+                add("Accept-Encoding", "gzip")
+                add("Accept-Language", language.substringBefore("-"))
+                add("Cache-Control", "max-age=0")
+                add("Connection", "Keep-alive")
+                add("Content-Type", "application/json; charset=utf-8")
+                add("Cookie", "arl=$arl&sid=$sid")
+                add("Host", "media.deezer.com")
+                add(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                )
+            }.build()
+        }
 
         val requestBody = json.encodeToString(
             buildJsonObject {
@@ -53,13 +60,13 @@ class DeezerMedia(private val json: Json, private val clientNP: OkHttpClient) {
             .headers(headers)
             .build()
 
-        val response = clientNP.newCall(request).execute()
+        val response = clientNP.newCall(request).await()
         val responseBody = response.body.string()
 
-        return json.decodeFromString<JsonObject>(responseBody)
+        return deezerApi.decodeJson(responseBody)
     }
 
-    fun getMediaUrl(track: Track, quality: String): JsonObject {
+    suspend fun getMediaUrl(track: Track, quality: String): JsonObject {
         val formats = when (quality) {
             "128" -> arrayOf("MP3_128")
             "flac" -> arrayOf("FLAC")
@@ -78,9 +85,9 @@ class DeezerMedia(private val json: Json, private val clientNP: OkHttpClient) {
             .post(requestBody)
             .build()
 
-        val response = clientNP.newCall(request).execute()
+        val response = clientNP.newCall(request).await()
         val responseBody = response.body.string()
 
-        return json.decodeFromString<JsonObject>(responseBody)
+        return deezerApi.decodeJson(responseBody)
     }
 }

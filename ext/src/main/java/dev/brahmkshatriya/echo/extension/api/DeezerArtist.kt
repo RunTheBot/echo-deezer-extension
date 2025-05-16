@@ -1,31 +1,25 @@
 package dev.brahmkshatriya.echo.extension.api
 
 import dev.brahmkshatriya.echo.extension.DeezerApi
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 
-class DeezerArtist(private val deezerApi: DeezerApi, private val json: Json) {
+class DeezerArtist(private val deezerApi: DeezerApi) {
 
     suspend fun artist(id: String, language: String): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "deezer.pageArtist",
             params = buildJsonObject {
                 put("art_id", id)
                 put ("lang", language.substringBefore("-"))
             }
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun getArtists(userId: String): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "deezer.pageProfile",
             params = buildJsonObject {
                 put("nb", 40)
@@ -33,9 +27,6 @@ class DeezerArtist(private val deezerApi: DeezerApi, private val json: Json) {
                 put("user_id", userId)
             }
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun followArtist(id: String) {

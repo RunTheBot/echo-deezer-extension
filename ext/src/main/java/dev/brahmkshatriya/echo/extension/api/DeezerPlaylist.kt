@@ -3,20 +3,17 @@ package dev.brahmkshatriya.echo.extension.api
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-class DeezerPlaylist(private val deezerApi: DeezerApi, private val json: Json) {
+class DeezerPlaylist(private val deezerApi: DeezerApi) {
 
     suspend fun playlist(playlist: Playlist, language: String): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "deezer.pagePlaylist",
             params = buildJsonObject {
                 put("playlist_id", playlist.id)
@@ -26,13 +23,10 @@ class DeezerPlaylist(private val deezerApi: DeezerApi, private val json: Json) {
                 put("start", 0)
             }
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun getPlaylists(userId: String): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "deezer.pageProfile",
             params = buildJsonObject {
                 put("user_id", userId)
@@ -40,9 +34,6 @@ class DeezerPlaylist(private val deezerApi: DeezerApi, private val json: Json) {
                 put("nb", 10000)
             }
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun addFavoritePlaylist(id: String) {
@@ -95,7 +86,7 @@ class DeezerPlaylist(private val deezerApi: DeezerApi, private val json: Json) {
     }
 
     suspend fun createPlaylist(title: String, description: String? = ""): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "playlist.create",
             params = buildJsonObject {
                 put("title", title)
@@ -104,9 +95,6 @@ class DeezerPlaylist(private val deezerApi: DeezerApi, private val json: Json) {
                 put("status", 0)
             }
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun deletePlaylist(id: String) {

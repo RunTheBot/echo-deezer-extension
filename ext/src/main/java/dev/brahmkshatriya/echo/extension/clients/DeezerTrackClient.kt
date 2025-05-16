@@ -82,7 +82,7 @@ class DeezerTrackClient(private val api: DeezerApi) {
         } else {
             val qualityOptions = listOf("flac", "320", "128")
 
-            fun createStreamableForQuality(quality: String): Streamable? {
+            suspend fun createStreamableForQuality(quality: String): Streamable? {
                 return try {
                     val currentTrackId = track.id
                     val mediaJson = if(quality != "128") api.getMediaUrl(track, quality) else api.getMP3MediaUrl(track, true)

@@ -2,32 +2,26 @@ package dev.brahmkshatriya.echo.extension.api
 
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-class DeezerTrack(private val deezerApi: DeezerApi, private val json: Json) {
+class DeezerTrack(private val deezerApi: DeezerApi) {
 
     suspend fun track(tracks: Array<Track>): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "song.getListData",
             params = buildJsonObject {
                 put("sng_ids", buildJsonArray { tracks.forEach { add(it.id) } })
             },
             np = true
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun getTracks(userId: String): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "favorite_song.getList",
             params = buildJsonObject {
                 put("user_id", userId)
@@ -37,9 +31,6 @@ class DeezerTrack(private val deezerApi: DeezerApi, private val json: Json) {
             },
             np = true
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun addFavoriteTrack(id: String) {

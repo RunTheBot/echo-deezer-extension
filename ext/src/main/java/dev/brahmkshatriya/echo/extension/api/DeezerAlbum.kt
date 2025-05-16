@@ -2,17 +2,14 @@ package dev.brahmkshatriya.echo.extension.api
 
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.extension.DeezerApi
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-class DeezerAlbum(private val deezerApi: DeezerApi, private val json: Json) {
+class DeezerAlbum(private val deezerApi: DeezerApi) {
 
     suspend fun album(album: Album, language: String): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "deezer.pageAlbum",
             params = buildJsonObject {
                 put("alb_id", album.id)
@@ -20,13 +17,10 @@ class DeezerAlbum(private val deezerApi: DeezerApi, private val json: Json) {
                 put("lang", language.substringBefore("-"))
             }
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun getAlbums(userId: String): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "deezer.pageProfile",
             params = buildJsonObject {
                 put("user_id", userId)
@@ -34,9 +28,6 @@ class DeezerAlbum(private val deezerApi: DeezerApi, private val json: Json) {
                 put("nb", 10000)
             }
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun addFavoriteAlbum(id: String) {

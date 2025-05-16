@@ -1,42 +1,33 @@
 package dev.brahmkshatriya.echo.extension.api
 
 import dev.brahmkshatriya.echo.extension.DeezerApi
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-class DeezerRadio(private val deezerApi: DeezerApi, private val json: Json) {
+class DeezerRadio(private val deezerApi: DeezerApi) {
 
     suspend fun mix(id: String): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "song.getSearchTrackMix",
             params = buildJsonObject {
                 put("sng_id", id)
                 put("start_with_input_track", false)
             }
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun mixArtist(id: String): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "smart.getSmartRadio",
             params = buildJsonObject {
                 put("art_id", id)
             }
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun radio(trackId: String, artistId: String): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "radio.getUpNext",
             params = buildJsonObject {
                 put("art_id", artistId)
@@ -44,13 +35,10 @@ class DeezerRadio(private val deezerApi: DeezerApi, private val json: Json) {
                 put("sng_id", trackId)
             }
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 
     suspend fun flow(id: String, userId: String): JsonObject {
-        val jsonData = deezerApi.callApi(
+        return deezerApi.callApi(
             method = "radio.getUserRadio",
             params = buildJsonObject {
                 if (id != "default") {
@@ -59,8 +47,5 @@ class DeezerRadio(private val deezerApi: DeezerApi, private val json: Json) {
                 put("user_id", userId)
             }
         )
-        return withContext(Dispatchers.Default) {
-            json.decodeFromString<JsonObject>(jsonData)
-        }
     }
 }
