@@ -59,7 +59,7 @@ class DeezerApi(private val session: DeezerSession) {
         }
     }
 
-    private val json = Json {
+    val json = Json {
         isLenient = true
         ignoreUnknownKeys = true
     }
@@ -220,7 +220,7 @@ class DeezerApi(private val session: DeezerSession) {
                     throw Exception("Please re-login (Best use User + Pass method)")
                 } else {
                     session.isArlExpired(false)
-                    val userList = DeezerExtension().onLogin(mapOf(Pair("email", email), Pair("pass", pass)))
+                    val userList = DeezerExtension().onLogin("userPass", mapOf(Pair("email", email), Pair("pass", pass)))
                     DeezerExtension().onSetLoginUser(userList.first())
                     return@withContext callApi(method, params, gatewayInput)
                 }
@@ -339,7 +339,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Media =============>
 
-    private val deezerMedia = DeezerMedia(this, json, clientNP)
+    private val deezerMedia = DeezerMedia(this, clientNP)
 
     suspend fun getMP3MediaUrl(track: Track, is128: Boolean): JsonObject = deezerMedia.getMP3MediaUrl(track, language, arl, sid, licenseToken, is128)
 

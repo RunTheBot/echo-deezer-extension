@@ -5,7 +5,6 @@ import dev.brahmkshatriya.echo.common.clients.ArtistClient
 import dev.brahmkshatriya.echo.common.clients.ArtistFollowClient
 import dev.brahmkshatriya.echo.common.clients.HomeFeedClient
 import dev.brahmkshatriya.echo.common.clients.LibraryFeedClient
-import dev.brahmkshatriya.echo.common.clients.LoginClient.InputField
 import dev.brahmkshatriya.echo.common.clients.LoginClient
 import dev.brahmkshatriya.echo.common.clients.LyricsClient
 import dev.brahmkshatriya.echo.common.clients.PlaylistClient
@@ -432,28 +431,43 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         return data.substringAfter("$key=").substringBefore(";").takeIf { it.isNotEmpty() }
     }
 
-    override val loginInputFields: List<InputField> = listOf(
-            InputField(
-                type = InputField.Type.Misc,
-                key = "arl",
-                label = "ARL",
-                isRequired = false,
-            ),
-            InputField(
-                type = InputField.Type.Email,
-                key = "email",
-                label = "E-Mail",
-                isRequired = true,
-            ),
-            InputField(
-                type = InputField.Type.Password,
-                key = "pass",
-                label = "Password",
-                isRequired = true
+    override val forms: List<LoginClient.Form> = listOf(
+        LoginClient.Form(
+            key = "userPass",
+            label = "E-Mail and Password",
+            icon = LoginClient.InputField.Type.Email,
+            inputFields = listOf(
+                LoginClient.InputField(
+                    type = LoginClient.InputField.Type.Email,
+                    key = "email",
+                    label = "E-Mail",
+                    isRequired = true,
+                ),
+                LoginClient.InputField(
+                    type = LoginClient.InputField.Type.Password,
+                    key = "pass",
+                    label = "Password",
+                    isRequired = true
+                )
+            )
+        ),
+        LoginClient.Form(
+            key = "manual",
+            label = "ARL",
+            icon = LoginClient.InputField.Type.Misc,
+            inputFields = listOf(
+                LoginClient.InputField(
+                    type = LoginClient.InputField.Type.Misc,
+                    key = "arl",
+                    label = "ARL",
+                    isRequired = false,
+                )
+
             )
         )
+    )
 
-    override suspend fun onLogin(data: Map<String, String?>): List<User> {
+    override suspend fun onLogin(key: String, data: Map<String, String?>): List<User> {
         if(data["email"] != null && data["pass"] != null) {
             val email = data["email"]!!
             val password = data["pass"]!!
