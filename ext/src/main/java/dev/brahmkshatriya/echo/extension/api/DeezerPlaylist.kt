@@ -3,21 +3,19 @@ package dev.brahmkshatriya.echo.extension.api
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
-import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 class DeezerPlaylist(private val deezerApi: DeezerApi) {
 
-    suspend fun playlist(playlist: Playlist, language: String): JsonObject {
+    suspend fun playlist(playlist: Playlist): JsonObject {
         return deezerApi.callApi(
             method = "deezer.pagePlaylist",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("playlist_id", playlist.id)
-                put ("lang", language.substringBefore("-"), )
+                put ("lang", deezerApi.langCode, )
                 put("nb", playlist.tracks)
                 put("tags", true)
                 put("start", 0)
@@ -28,7 +26,7 @@ class DeezerPlaylist(private val deezerApi: DeezerApi) {
     suspend fun getPlaylists(userId: String): JsonObject {
         return deezerApi.callApi(
             method = "deezer.pageProfile",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("user_id", userId)
                 put ("tab", "playlists")
                 put("nb", 10000)
@@ -39,7 +37,7 @@ class DeezerPlaylist(private val deezerApi: DeezerApi) {
     suspend fun addFavoritePlaylist(id: String) {
         deezerApi.callApi(
             method = "playlist.addFavorite",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("PARENT_PLAYLIST_ID", id)
             }
         )
@@ -48,7 +46,7 @@ class DeezerPlaylist(private val deezerApi: DeezerApi) {
     suspend fun removeFavoritePlaylist(id: String) {
         deezerApi.callApi(
             method = "playlist.deleteFavorite",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("PLAYLIST_ID", id)
             }
         )
@@ -57,7 +55,7 @@ class DeezerPlaylist(private val deezerApi: DeezerApi) {
     suspend fun addToPlaylist(playlist: Playlist, tracks: List<Track>) {
         deezerApi.callApi(
             method = "playlist.addSongs",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("playlist_id", playlist.id)
                 put("songs", buildJsonArray {
                     tracks.forEach { track ->
@@ -68,13 +66,13 @@ class DeezerPlaylist(private val deezerApi: DeezerApi) {
         )
     }
 
-    suspend fun removeFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) = coroutineScope {
+    suspend fun removeFromPlaylist(playlist: Playlist, tracks: List<Track>, indexes: List<Int>) {
         val trackIds = tracks.map { it.id }
         val ids = indexes.map { index -> trackIds[index] }
 
         deezerApi.callApi(
             method = "playlist.deleteSongs",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("playlist_id", playlist.id)
                 put("songs", buildJsonArray {
                     ids.forEach { id ->
@@ -88,7 +86,7 @@ class DeezerPlaylist(private val deezerApi: DeezerApi) {
     suspend fun createPlaylist(title: String, description: String? = ""): JsonObject {
         return deezerApi.callApi(
             method = "playlist.create",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("title", title)
                 put ("description", description, )
                 put("songs", buildJsonArray {})
@@ -100,7 +98,7 @@ class DeezerPlaylist(private val deezerApi: DeezerApi) {
     suspend fun deletePlaylist(id: String) {
         deezerApi.callApi(
             method = "playlist.delete",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("playlist_id", id)
             }
         )
@@ -109,7 +107,7 @@ class DeezerPlaylist(private val deezerApi: DeezerApi) {
     suspend fun updatePlaylist(id: String, title: String, description: String? = "") {
         deezerApi.callApi(
             method = "playlist.update",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("description", description)
                 put ("playlist_id", id)
                 put("status", 0)
@@ -121,7 +119,7 @@ class DeezerPlaylist(private val deezerApi: DeezerApi) {
     suspend fun updatePlaylistOrder(playlistId: String, ids: MutableList<String>) {
         deezerApi.callApi(
             method = "playlist.updateOrder",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("order", buildJsonArray { ids.forEach { add(it) } })
                 put ("playlist_id", playlistId)
                 put("position", 0)

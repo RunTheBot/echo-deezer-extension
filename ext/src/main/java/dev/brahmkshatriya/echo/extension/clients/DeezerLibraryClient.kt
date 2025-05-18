@@ -9,29 +9,29 @@ import dev.brahmkshatriya.echo.extension.DeezerParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.supervisorScope
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
-class DeezerLibraryClient(private val api: DeezerApi, private val parser: DeezerParser) {
+class DeezerLibraryClient(private val deezerExtension: DeezerExtension, private val api: DeezerApi, private val parser: DeezerParser) {
 
     @Volatile
     private var allTabs: Pair<String, List<Shelf>>? = null
 
-    suspend fun getLibraryTabs(): List<Tab> {
-        DeezerExtension().handleArlExpiration()
+    private val tabs = listOf(
+        Tab("playlists", "Playlists"),
+        Tab("albums", "Albums"),
+        Tab("tracks", "Tracks"),
+        Tab("artists", "Artists"),
+        Tab("shows", "Podcasts")
+    )
 
-        val tabs = listOf(
-            Tab("playlists", "Playlists"),
-            Tab("albums", "Albums"),
-            Tab("tracks", "Tracks"),
-            Tab("artists", "Artists"),
-            Tab("shows", "Podcasts")
-        )
+    suspend fun getLibraryTabs(): List<Tab> {
+        deezerExtension.handleArlExpiration()
 
         try {
-            allTabs = "all" to coroutineScope {
+            allTabs = "all" to supervisorScope {
                 tabs.map { tab ->
                     async(Dispatchers.IO) {
                         val jsonObject = when (tab.id) {
@@ -68,7 +68,7 @@ class DeezerLibraryClient(private val api: DeezerApi, private val parser: Deezer
     }
 
     fun getLibraryFeed(tab: Tab?): PagedData.Single<Shelf> = PagedData.Single {
-        DeezerExtension().handleArlExpiration()
+        deezerExtension.handleArlExpiration()
 
         val tabId = tab?.id ?: "all"
         val list = when (tabId) {

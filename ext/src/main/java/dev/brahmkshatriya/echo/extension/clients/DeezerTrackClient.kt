@@ -14,35 +14,36 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.supervisorScope
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 
-class DeezerTrackClient(private val api: DeezerApi) {
+class DeezerTrackClient(private val deezerExtension: DeezerExtension, private val api: DeezerApi) {
 
-    private val client = OkHttpClient()
+    private val client by lazy { OkHttpClient() }
+    private val localAudioServer by lazy { LocalAudioServer }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media {
-        DeezerExtension().handleArlExpiration()
+        deezerExtension.handleArlExpiration()
         return if (streamable.quality == 12) {
             streamable.id.toSource().toMedia()
         } else {
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             if(isDownload) {
                 getByteStreamAudio(scope, streamable, client)
             } else {
-                val localAudioServer = LocalAudioServer
-                localAudioServer.addTrack(streamable, scope)
-                localAudioServer.getStreamUrlForTrack(streamable.id, scope).toSource().toMedia()
+                localAudioServer.addTrack(streamable, scope, client)
+                localAudioServer.getStreamUrlForTrack(streamable.id, scope, client).toSource().toMedia()
             }
         }
     }
 
     suspend fun loadTrack(track: Track): Track {
-        DeezerExtension().handleArlExpiration()
+        deezerExtension.handleArlExpiration()
 
         if (track.extras["__TYPE__"] == "show") {
             return track
@@ -128,7 +129,7 @@ class DeezerTrackClient(private val api: DeezerApi) {
                 }
             }
 
-            val streamables = coroutineScope {
+            val streamables = supervisorScope {
                 qualityOptions.map { quality ->
                     async(Dispatchers.IO) { createStreamableForQuality(quality) }
                 }.awaitAll().filterNotNull()

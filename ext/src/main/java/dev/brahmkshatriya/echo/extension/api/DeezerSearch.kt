@@ -2,7 +2,6 @@ package dev.brahmkshatriya.echo.extension.api
 
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 
@@ -11,7 +10,7 @@ class DeezerSearch(private val deezerApi: DeezerApi) {
     suspend fun search(query: String): JsonObject {
         return deezerApi.callApi(
             method = "deezer.pageSearch",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("nb", 128)
                 put("query", query)
                 put("start", 0)
@@ -22,7 +21,7 @@ class DeezerSearch(private val deezerApi: DeezerApi) {
     suspend fun searchSuggestions(query: String): JsonObject {
         return deezerApi.callApi(
             method = "search_getSuggestedQueries",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("QUERY", query)
             }
         )
@@ -31,7 +30,7 @@ class DeezerSearch(private val deezerApi: DeezerApi) {
     suspend fun setSearchHistory(query: String) {
         deezerApi.callApi(
             method = "user.addEntryInSearchHistory",
-            params = buildJsonObject {
+            paramsBuilder = {
                 putJsonObject("ENTRY") {
                     put("query", query)
                     put("type", "query")
@@ -49,7 +48,7 @@ class DeezerSearch(private val deezerApi: DeezerApi) {
     suspend fun deleteSearchHistory(userId: String) {
         deezerApi.callApi(
             method = "user.clearSearchHistory",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("USER_ID", userId)
             }
         )

@@ -11,7 +11,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
-class DeezerPlaylistClient(private val api: DeezerApi, private val parser: DeezerParser) {
+class DeezerPlaylistClient(private val deezerExtension: DeezerExtension, private val api: DeezerApi, private val parser: DeezerParser) {
 
     fun getShelves(playlist: Playlist): PagedData.Single<Shelf> = PagedData.Single {
         /*DeezerExtension().handleArlExpiration()
@@ -29,14 +29,14 @@ class DeezerPlaylistClient(private val api: DeezerApi, private val parser: Deeze
     }
 
     suspend fun loadPlaylist(playlist: Playlist): Playlist {
-        DeezerExtension().handleArlExpiration()
+        deezerExtension.handleArlExpiration()
         val jsonObject = api.playlist(playlist)
         val resultsObject = jsonObject["results"]!!.jsonObject
         return parser.run { resultsObject.toPlaylist() }
     }
 
     fun loadTracks(playlist: Playlist): PagedData<Track> = PagedData.Single {
-        DeezerExtension().handleArlExpiration()
+        deezerExtension.handleArlExpiration()
         val jsonObject = api.playlist(playlist)
         val dataArray = jsonObject["results"]!!.jsonObject["SONGS"]!!.jsonObject["data"]!!.jsonArray
         dataArray.mapIndexed { index, song ->

@@ -268,10 +268,11 @@ class DeezerParser(private val session: DeezerSession) {
         day = substringAfterLast("-").substringBefore(" ").toInt()
     )
 
+    private val simpleDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
     private fun Long.toDate(): EchoDate {
         val date = Date(this * 1000)
-        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        return formatter.format(date).toDate()
+        return simpleDateFormat.format(date).toDate()
     }
 
     private fun JsonObject.toRadio(): Radio {

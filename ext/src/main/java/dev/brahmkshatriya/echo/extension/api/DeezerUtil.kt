@@ -4,7 +4,6 @@ import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -15,13 +14,13 @@ class DeezerUtil(private val deezerApi: DeezerApi) {
     suspend fun updateCountry(country: String) {
         deezerApi.callApi(
             method = "user.updateRecommendationCountry",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("RECOMMENDATION_COUNTRY", country)
             }
         )
     }
 
-    suspend fun log(track: Track, userId: String) = withContext(Dispatchers.IO) {
+    suspend fun log(track: Track, userId: String) {
         val id = track.id
         val next = track.extras["NEXT"]
         val ctxtT: String
@@ -49,7 +48,7 @@ class DeezerUtil(private val deezerApi: DeezerApi) {
         }
         deezerApi.callApi(
             method = "log.listen",
-            params = buildJsonObject {
+            paramsBuilder = {
                 putJsonObject("next_media") {
                     putJsonObject("media") {
                         put("id", next)

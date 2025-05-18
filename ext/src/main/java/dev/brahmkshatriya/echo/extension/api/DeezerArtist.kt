@@ -2,18 +2,17 @@ package dev.brahmkshatriya.echo.extension.api
 
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 
 class DeezerArtist(private val deezerApi: DeezerApi) {
 
-    suspend fun artist(id: String, language: String): JsonObject {
+    suspend fun artist(id: String): JsonObject {
         return deezerApi.callApi(
             method = "deezer.pageArtist",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("art_id", id)
-                put ("lang", language.substringBefore("-"))
+                put ("lang", deezerApi.langCode)
             }
         )
     }
@@ -21,7 +20,7 @@ class DeezerArtist(private val deezerApi: DeezerApi) {
     suspend fun getArtists(userId: String): JsonObject {
         return deezerApi.callApi(
             method = "deezer.pageProfile",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("nb", 40)
                 put ("tab", "artists")
                 put("user_id", userId)
@@ -32,7 +31,7 @@ class DeezerArtist(private val deezerApi: DeezerApi) {
     suspend fun followArtist(id: String) {
         deezerApi.callApi(
             method = "artist.addFavorite",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("ART_ID", id)
                 putJsonObject("CTXT") {
                     put("id", id)
@@ -45,7 +44,7 @@ class DeezerArtist(private val deezerApi: DeezerApi) {
     suspend fun unfollowArtist(id: String) {
         deezerApi.callApi(
             method = "artist.deleteFavorite",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("ART_ID", id)
                 putJsonObject("CTXT") {
                     put("id", id)

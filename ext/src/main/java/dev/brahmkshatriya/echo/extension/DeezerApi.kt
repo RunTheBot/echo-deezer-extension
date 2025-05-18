@@ -19,6 +19,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -27,7 +28,9 @@ import kotlinx.serialization.json.putJsonObject
 import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -45,21 +48,7 @@ import javax.net.ssl.X509TrustManager
 
 class DeezerApi(private val session: DeezerSession) {
 
-    init {
-        if (session.credentials == null) {
-            session.credentials = DeezerCredentials(
-                arl = "",
-                sid = "",
-                token = "",
-                userId = "",
-                licenseToken = "",
-                email = "",
-                pass = ""
-            )
-        }
-    }
-
-    val json = Json {
+    private val json = Json {
         isLenient = true
         ignoreUnknownKeys = true
     }
@@ -70,8 +59,10 @@ class DeezerApi(private val session: DeezerSession) {
     private val country: String
         get() = session.settings?.getString("country") ?: Locale.getDefault().country
 
+    val langCode by lazy { language.substringBefore("-") }
+
     private val credentials: DeezerCredentials
-        get() = session.credentials ?: throw IllegalStateException("DeezerCredentials not initialized")
+        get() = session.credentials
 
     private val arl: String
         get() = credentials.arl
@@ -169,7 +160,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     suspend fun callApi(
         method: String,
-        params: JsonObject = buildJsonObject { },
+        paramsBuilder: JsonObjectBuilder.() -> Unit = {},
         gatewayInput: String? = "",
         np: Boolean = false
     ): JsonObject = withContext(Dispatchers.IO) {
@@ -187,7 +178,7 @@ class DeezerApi(private val session: DeezerSession) {
             }
             .build()
 
-        val requestBody = json.encodeToString(params).toRequestBody()
+        val requestBody =  encodeJson(paramsBuilder).toRequestBody()
         val request = Request.Builder()
             .url(url)
             .apply {
@@ -222,7 +213,7 @@ class DeezerApi(private val session: DeezerSession) {
                     session.isArlExpired(false)
                     val userList = DeezerExtension().onLogin("userPass", mapOf(Pair("email", email), Pair("pass", pass)))
                     DeezerExtension().onSetLoginUser(userList.first())
-                    return@withContext callApi(method, params, gatewayInput)
+                    return@withContext callApi(method, paramsBuilder, gatewayInput)
                 }
             }
 
@@ -341,7 +332,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     private val deezerMedia = DeezerMedia(this, clientNP)
 
-    suspend fun getMP3MediaUrl(track: Track, is128: Boolean): JsonObject = deezerMedia.getMP3MediaUrl(track, language, arl, sid, licenseToken, is128)
+    suspend fun getMP3MediaUrl(track: Track, is128: Boolean): JsonObject = deezerMedia.getMP3MediaUrl(track, arl, sid, licenseToken, is128)
 
     suspend fun getMediaUrl(track: Track, quality: String): JsonObject = deezerMedia.getMediaUrl(track, quality)
 
@@ -375,7 +366,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     private val deezerArtist = DeezerArtist(this)
 
-    suspend fun artist(id: String): JsonObject = deezerArtist.artist(id, language)
+    suspend fun artist(id: String): JsonObject = deezerArtist.artist(id)
 
     suspend fun getArtists(): JsonObject = deezerArtist.getArtists(userId)
 
@@ -387,7 +378,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     private val deezerAlbum = DeezerAlbum(this)
 
-    suspend fun album(album: Album): JsonObject = deezerAlbum.album(album, language)
+    suspend fun album(album: Album): JsonObject = deezerAlbum.album(album)
 
     suspend fun getAlbums(): JsonObject = deezerAlbum.getAlbums(userId)
 
@@ -400,9 +391,9 @@ class DeezerApi(private val session: DeezerSession) {
     suspend fun show(album: Album): JsonObject {
         return callApi(
             method = "deezer.pageShow",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("country", language.substringAfter("-"))
-                put("lang", language.substringBefore("-"))
+                put("lang", langCode)
                 put("nb", album.tracks)
                 put("show_id", album.id)
                 put("start", 0)
@@ -414,7 +405,7 @@ class DeezerApi(private val session: DeezerSession) {
     suspend fun getShows(): JsonObject {
         return callApi(
             method = "deezer.pageProfile",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("user_id", userId)
                 put("tab", "podcasts")
                 put("nb", 2000)
@@ -426,7 +417,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     private val deezerPlaylist = DeezerPlaylist(this)
 
-    suspend fun playlist(playlist: Playlist): JsonObject = deezerPlaylist.playlist(playlist, language)
+    suspend fun playlist(playlist: Playlist): JsonObject = deezerPlaylist.playlist(playlist)
 
     suspend fun getPlaylists(): JsonObject = deezerPlaylist.getPlaylists(userId)
 
@@ -464,7 +455,7 @@ class DeezerApi(private val session: DeezerSession) {
         return callApi(
             method = "page.get",
             gatewayInput = """
-                {"PAGE":"$page","VERSION":"2.5","SUPPORT":{"ads":[],"deeplink-list":["deeplink"],"event-card":["live-event"],"grid-preview-one":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid-preview-two":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-list":["track","song"],"item-highlight":["radio"],"large-card":["album","external-link","playlist","show","video-link"],"list":["episode"],"mini-banner":["external-link"],"slideshow":["album","artist","channel","external-link","flow","livestream","playlist","show","smarttracklist","user","video-link"],"small-horizontal-grid":["flow"],"long-card-horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"filterable-grid":["flow"]},"LANG":"${language.substringBefore("-")}","OPTIONS":["deeplink_newsandentertainment","deeplink_subscribeoffer"]}
+                {"PAGE":"$page","VERSION":"2.5","SUPPORT":{"ads":[],"deeplink-list":["deeplink"],"event-card":["live-event"],"grid-preview-one":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid-preview-two":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"horizontal-list":["track","song"],"item-highlight":["radio"],"large-card":["album","external-link","playlist","show","video-link"],"list":["episode"],"mini-banner":["external-link"],"slideshow":["album","artist","channel","external-link","flow","livestream","playlist","show","smarttracklist","user","video-link"],"small-horizontal-grid":["flow"],"long-card-horizontal-grid":["album","artist","artistLineUp","channel","livestream","flow","playlist","radio","show","smarttracklist","track","user","video-link","external-link"],"filterable-grid":["flow"]},"LANG":"$langCode","OPTIONS":["deeplink_newsandentertainment","deeplink_subscribeoffer"]}
             """.trimIndent()
         )
     }
@@ -481,7 +472,7 @@ class DeezerApi(private val session: DeezerSession) {
         val jsonObject = decodeJson(response.body.string())
 
         val jwt = jsonObject["jwt"]?.jsonPrimitive?.content
-        val params = buildJsonObject {
+        val params = encodeJson {
             put("operationName", "SynchronizedTrackLyrics")
             put("query", "query SynchronizedTrackLyrics(\$trackId: String!) {\n  track(trackId: \$trackId) {\n    id\n    isExplicit\n    lyrics {\n      id\n      copyright\n      text\n      writers\n      synchronizedLines {\n        lrcTimestamp\n        line\n        milliseconds\n        duration\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}")
             putJsonObject("variables") {
@@ -490,7 +481,7 @@ class DeezerApi(private val session: DeezerSession) {
         }
         val pipeRequest = Request.Builder()
             .url("https://pipe.deezer.com/api")
-            .post(json.encodeToString(params).toRequestBody())
+            .post(params.toRequestBody())
             .headers(Headers.headersOf("Authorization", "Bearer $jwt", "Content-Type", "application/json"))
             .build()
         val pipeResponse = clientNP.newCall(pipeRequest).await()
@@ -507,5 +498,9 @@ class DeezerApi(private val session: DeezerSession) {
     
     suspend fun decodeJson(raw: String): JsonObject = withContext(Dispatchers.Default) {
         json.decodeFromString<JsonObject>(raw)
+    }
+
+    suspend fun encodeJson(raw: JsonObjectBuilder.() -> Unit = {}): String = withContext(Dispatchers.Default) {
+        json.encodeToString(buildJsonObject(raw))
     }
 }

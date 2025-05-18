@@ -7,9 +7,6 @@ import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import dev.brahmkshatriya.echo.extension.DeezerExtension
 import dev.brahmkshatriya.echo.extension.DeezerParser
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -17,13 +14,13 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.util.Locale
 
-class DeezerSearchClient(private val api: DeezerApi, private val history: Boolean, private val parser: DeezerParser) {
+class DeezerSearchClient(private val deezerExtension: DeezerExtension, private val api: DeezerApi, private val history: Boolean, private val parser: DeezerParser) {
 
     @Volatile
     private var oldSearch: Pair<String, List<Shelf>>? = null
 
     suspend fun quickSearch(query: String): List<QuickSearchItem.Query> {
-        DeezerExtension().handleArlExpiration()
+        deezerExtension.handleArlExpiration()
         return if (query.isBlank()) {
             val queryList = mutableListOf<QuickSearchItem.Query>()
             val jsonObject = api.getSearchHistory()
@@ -59,7 +56,7 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
     }
 
     fun searchFeed(query: String, tab: Tab?, shelf: String): PagedData.Single<Shelf> = PagedData.Single {
-        DeezerExtension().handleArlExpiration()
+        deezerExtension.handleArlExpiration()
         query.ifBlank { return@Single browseFeed(shelf) }
 
         if (history) {
@@ -89,7 +86,7 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
     }
 
     private suspend fun browseFeed(shelf: String): List<Shelf> {
-        DeezerExtension().handleArlExpiration()
+        deezerExtension.handleArlExpiration()
         api.updateCountry()
         val jsonObject = api.page("channels/explore/explore-tab")
         val browsePageResults = jsonObject["results"]!!.jsonObject
@@ -97,15 +94,15 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
         return browseSections.mapNotNull { section ->
             val id = section.jsonObject["module_id"]!!.jsonPrimitive.content
             when (id) {
-                "8b2c6465-874d-4752-a978-1637ca0227b5" -> {
+                EXPLORE_MODULE_ID -> {
                     parser.run {
                         section.toShelfCategoryList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty(), shelf) { target ->
-                            DeezerExtension().channelFeed(target)
+                           deezerExtension.channelFeed(target)
                         }
                     }
                 }
 
-                !in "6550abfd-15e4-47de-a5e8-a60e27fa152a", !in "c8b406d4-5293-4f59-a0f4-562eba496a0b" -> {
+                !in SKIP_MODULES_IDS -> {
                     parser.run {
                         val secShelf =
                             section.toShelfItemsList(section.jsonObject["title"]?.jsonPrimitive?.content.orEmpty()) as? Shelf.Lists.Items
@@ -131,34 +128,45 @@ class DeezerSearchClient(private val api: DeezerApi, private val history: Boolea
     }
 
     suspend fun searchTabs(query: String): List<Tab> {
-        DeezerExtension().handleArlExpiration()
+        deezerExtension.handleArlExpiration()
         query.ifBlank { return emptyList() }
 
         val jsonObject = api.search(query)
         val resultObject = jsonObject["results"]?.jsonObject
         val orderObject = resultObject?.get("ORDER")?.jsonArray
 
-        val tabs = coroutineScope {
-            orderObject?.mapNotNull {
-                async {
-                    val tabId = it.jsonPrimitive.content
-                    if (tabId != "TOP_RESULT" && tabId != "FLOW_CONFIG") {
-                        Tab(tabId, tabId.lowercase().capitalize(Locale.ROOT))
-                    } else {
-                        null
-                    }
-                }
-            }?.awaitAll()?.filterNotNull() ?: emptyList()
-        }
+        val tabs = orderObject?.mapNotNull { tab ->
+            val tabId = tab.jsonPrimitive.content
+            if (tabId !in SKIP_TAB_IDS) {
+                Tab(
+                    tabId,
+                    tabId.lowercase()
+                        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() })
+            } else {
+                null
+            }
+        } ?: emptyList()
 
         oldSearch = query to tabs.mapNotNull { tab ->
             val name = tab.id
             val tabObject = resultObject?.get(name)?.jsonObject
             val dataArray = tabObject?.get("data")?.jsonArray
             parser.run {
-                dataArray?.toShelfItemsList(name.lowercase().capitalize(Locale.ROOT))
+                dataArray?.toShelfItemsList(
+                    name.lowercase()
+                        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() })
             }
         }
         return listOf(Tab("All", "All")) + tabs
+    }
+
+    companion object {
+        private val SKIP_TAB_IDS =
+            setOf("TOP_RESULT", "FLOW_CONFIG", "LIVESTREAM", "RADIO", "LYRICS", "CHANNEL", "USER")
+
+        private val SKIP_MODULES_IDS =
+            setOf("6550abfd-15e4-47de-a5e8-a60e27fa152a", "c8b406d4-5293-4f59-a0f4-562eba496a0b")
+
+        private const val EXPLORE_MODULE_ID = "8b2c6465-874d-4752-a978-1637ca0227b5"
     }
 }

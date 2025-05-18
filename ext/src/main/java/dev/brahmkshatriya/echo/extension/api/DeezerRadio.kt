@@ -2,7 +2,6 @@ package dev.brahmkshatriya.echo.extension.api
 
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 class DeezerRadio(private val deezerApi: DeezerApi) {
@@ -10,7 +9,7 @@ class DeezerRadio(private val deezerApi: DeezerApi) {
     suspend fun mix(id: String): JsonObject {
         return deezerApi.callApi(
             method = "song.getSearchTrackMix",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("sng_id", id)
                 put("start_with_input_track", false)
             }
@@ -20,7 +19,7 @@ class DeezerRadio(private val deezerApi: DeezerApi) {
     suspend fun mixArtist(id: String): JsonObject {
         return deezerApi.callApi(
             method = "smart.getSmartRadio",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("art_id", id)
             }
         )
@@ -29,7 +28,7 @@ class DeezerRadio(private val deezerApi: DeezerApi) {
     suspend fun radio(trackId: String, artistId: String): JsonObject {
         return deezerApi.callApi(
             method = "radio.getUpNext",
-            params = buildJsonObject {
+            paramsBuilder = {
                 put("art_id", artistId)
                 put("limit", 10)
                 put("sng_id", trackId)
@@ -40,7 +39,7 @@ class DeezerRadio(private val deezerApi: DeezerApi) {
     suspend fun flow(id: String, userId: String): JsonObject {
         return deezerApi.callApi(
             method = "radio.getUserRadio",
-            params = buildJsonObject {
+            paramsBuilder = {
                 if (id != "default") {
                     put("config_id", id)
                 }

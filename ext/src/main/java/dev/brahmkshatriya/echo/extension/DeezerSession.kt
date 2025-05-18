@@ -1,13 +1,20 @@
 package dev.brahmkshatriya.echo.extension
 
 import dev.brahmkshatriya.echo.common.settings.Settings
+import java.util.concurrent.atomic.AtomicReference
 
 class DeezerSession(
-    var credentials: DeezerCredentials? = null,
     var settings: Settings? = null,
     var arlExpired: Boolean = false
 ) {
-    private val lock = Any()
+
+    private val credentialsRef = AtomicReference(
+        DeezerCredentials("", "", "", "", "", "", "")
+    )
+
+    var credentials: DeezerCredentials
+        get() = credentialsRef.get()
+        private set(value) = credentialsRef.set(value)
 
     fun updateCredentials(
         arl: String? = null,
@@ -18,9 +25,8 @@ class DeezerSession(
         email: String? = null,
         pass: String? = null
     ) {
-        synchronized(lock) {
-            val current = credentials ?: DeezerCredentials("", "", "", "", "", "", "")
-            credentials = current.copy(
+        credentialsRef.updateAndGet { current ->
+            current.copy(
                 arl = arl ?: current.arl,
                 sid = sid ?: current.sid,
                 token = token ?: current.token,

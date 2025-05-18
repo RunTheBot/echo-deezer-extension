@@ -3,7 +3,6 @@ package dev.brahmkshatriya.echo.extension
 import dev.brahmkshatriya.echo.common.models.Streamable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -21,57 +20,48 @@ import java.net.Socket
 import java.net.SocketException
 import java.net.URLDecoder
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 object LocalAudioServer {
 
     private val trackMap = ConcurrentHashMap<String, Pair<Streamable, String>>()
-    private var serverSocket: ServerSocket? = null
-    private var serverJob: Job? = null
-    private val lock = Any()
 
-    @Volatile
+    private val serverStarted = AtomicBoolean(false)
+    private lateinit var serverSocket: ServerSocket
     private var usedPort: Int = -1
-    private const val HOSTNAME = "127.0.0.1"
 
-    private val okHttpClient = OkHttpClient()
+    private fun startServerIfNeeded(scope: CoroutineScope, client: OkHttpClient) {
+        if (serverStarted.compareAndSet(false, true)) {
+            serverSocket = ServerSocket(0, 50)
+            usedPort = serverSocket.localPort
 
-    private fun startServerIfNeeded(scope: CoroutineScope) {
-        synchronized(lock) {
-            if (serverSocket == null) {
-                serverSocket = ServerSocket(0, 50)
-                usedPort = serverSocket!!.localPort
-
-                serverJob = scope.launch(Dispatchers.IO) {
-                    println("LocalAudioServer started on port: $usedPort")
-                    while (isActive) {
-                        try {
-                            val clientSocket = serverSocket!!.accept()
-                            launch(Dispatchers.IO) {
-                                handleClient(clientSocket)
-                            }
-                        } catch (e: IOException) {
-                            if (isActive) e.printStackTrace()
+            scope.launch(Dispatchers.IO) {
+                println("LocalAudioServer started on port: $usedPort")
+                while (isActive) {
+                    try {
+                        val clientSocket = serverSocket.accept()
+                        launch {
+                            handleClient(clientSocket, client)
                         }
+                    } catch (e: IOException) {
+                        if (isActive) e.printStackTrace()
                     }
                 }
             }
         }
     }
 
-    fun addTrack(streamable: Streamable, scope: CoroutineScope) {
-        synchronized(lock) {
-            startServerIfNeeded(scope)
-            val key = streamable.extras["key"] ?: ""
-            trackMap[streamable.id] = streamable to key
-        }
+    fun addTrack(streamable: Streamable, scope: CoroutineScope, client: OkHttpClient) {
+        trackMap[streamable.id] = streamable to (streamable.extras["key"] ?: "")
+        startServerIfNeeded(scope, client)
     }
 
-    fun getStreamUrlForTrack(trackId: String, scope: CoroutineScope): String {
-        startServerIfNeeded(scope)
-        return "http://$HOSTNAME:$usedPort/stream?trackId=$trackId"
+    fun getStreamUrlForTrack(trackId: String, scope: CoroutineScope, client: OkHttpClient): String {
+        startServerIfNeeded(scope, client)
+        return "http://127.0.0.1:$usedPort/stream?trackId=$trackId"
     }
 
-    private fun handleClient(socket: Socket) {
+    private fun handleClient(socket: Socket, client: OkHttpClient) {
         socket.use { s ->
             s.soTimeout = 10_000
             val input = BufferedReader(InputStreamReader(s.getInputStream()))
@@ -132,11 +122,12 @@ object LocalAudioServer {
                 }
             }
 
-            streamDeezer(output, isRanged, startBytes, endBytes, key, streamable.id)
+            streamDeezer(client, output, isRanged, startBytes, endBytes, key, streamable.id)
         }
     }
 
     private fun streamDeezer(
+        client: OkHttpClient,
         output: BufferedOutputStream,
         isRanged: Boolean,
         startBytes: Long,
@@ -160,7 +151,7 @@ object LocalAudioServer {
             .build()
 
         try {
-            okHttpClient.newCall(request).execute().use { response ->
+            client.newCall(request).execute().use { response ->
                 val code = if (isRanged) 206 else 200
                 val reason = if (isRanged) "Partial Content" else "OK"
                 val contentType = response.header("Content-Type") ?: "audio/mpeg"

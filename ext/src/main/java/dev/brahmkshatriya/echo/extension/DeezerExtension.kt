@@ -52,7 +52,7 @@ import dev.brahmkshatriya.echo.extension.clients.DeezerTrackClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.supervisorScope
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -152,7 +152,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= HomeTab =============>
 
-    private val deezerHomeFeedClient = DeezerHomeFeedClient(api, parser)
+    private val deezerHomeFeedClient = DeezerHomeFeedClient(this, api, parser)
 
     override suspend fun getHomeTabs(): List<Tab> = listOf()
 
@@ -160,7 +160,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Library =============>
 
-    private val deezerLibraryClient = DeezerLibraryClient(api, parser)
+    private val deezerLibraryClient = DeezerLibraryClient(this, api, parser)
 
     override suspend fun getLibraryTabs(): List<Tab> = deezerLibraryClient.getLibraryTabs()
 
@@ -298,7 +298,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Search =============>
 
-    private val deezerSearchClient = DeezerSearchClient(api, history, parser)
+    private val deezerSearchClient = DeezerSearchClient(this, api, history, parser)
 
     override suspend fun quickSearch(query: String): List<QuickSearchItem.Query> = deezerSearchClient.quickSearch(query)
 
@@ -314,11 +314,12 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         val jsonObject = api.page(target.substringAfter("/"))
         val channelPageResults = jsonObject["results"]!!.jsonObject
         val channelSections = channelPageResults["sections"]!!.jsonArray
-        return coroutineScope {
+        return supervisorScope {
             channelSections.map { section ->
-                async(Dispatchers.IO) {
+                async(Dispatchers.Default) {
                     parser.run {
-                        section.toShelfItemsList(section.jsonObject["title"]!!.jsonPrimitive.content)
+                        section.jsonObject["title"]?.jsonPrimitive?.content
+                            ?.let { section.toShelfItemsList(it) }
                     }
                 }
             }.awaitAll().filterNotNull()
@@ -327,7 +328,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Play =============>
 
-    private val deezerTrackClient = DeezerTrackClient(api)
+    private val deezerTrackClient = DeezerTrackClient(this, api)
 
     override suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media = deezerTrackClient.loadStreamableMedia(streamable, isDownload)
 
@@ -363,7 +364,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Album =============>
 
-    private val deezerAlbumClient = DeezerAlbumClient(api, parser)
+    private val deezerAlbumClient = DeezerAlbumClient(this, api, parser)
 
     override fun getShelves(album: Album): PagedData.Single<Shelf> = getShelves(album.artists.first())
 
@@ -373,7 +374,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Playlist =============>
 
-    private val deezerPlaylistClient = DeezerPlaylistClient(api, parser)
+    private val deezerPlaylistClient = DeezerPlaylistClient(this, api, parser)
 
     override fun getShelves(playlist: Playlist): PagedData.Single<Shelf> = deezerPlaylistClient.getShelves(playlist)
 
@@ -383,7 +384,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Artist =============>
 
-    private val deezerArtistClient = DeezerArtistClient(api, parser)
+    private val deezerArtistClient = DeezerArtistClient(this, api, parser)
 
     override fun getShelves(artist: Artist): PagedData.Single<Shelf> = deezerArtistClient.getShelves(artist)
 
@@ -414,7 +415,6 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun onLoginWebviewStop(url: String, data: Map<String, String>): List<User> {
         val fData = data.values.first()
-        println("FUCK YOU $fData")
         val arl = extractCookieValue(fData, "arl")
         val sid = extractCookieValue(fData, "sid")
         if (arl != null && sid != null) {
@@ -485,15 +485,6 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         }
     }
 
-    /*override suspend fun onLogin(username: String, password: String): List<User> {
-        // Set shared credentials
-        session.updateCredentials(email = username, pass = password)
-
-        api.getArlByEmail(username, password, 3)
-        val userList = api.makeUser(username, password)
-        return userList
-    }*/
-
     override suspend fun onSetLoginUser(user: User?) {
         if (user != null) {
             session.updateCredentials(
@@ -527,7 +518,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
             is EchoMediaItem.Profile.UserItem -> "https://www.deezer.com/profile/${item.id}"
             is EchoMediaItem.Lists.AlbumItem -> "https://www.deezer.com/album/${item.id}"
             is EchoMediaItem.Lists.PlaylistItem -> "https://www.deezer.com/playlist/${item.id}"
-            is EchoMediaItem.Lists.RadioItem -> TODO()
+            is EchoMediaItem.Lists.RadioItem -> TODO("Does not exist")
         }
     }
 
@@ -546,8 +537,8 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
     //<============= Utils =============>
 
     suspend fun handleArlExpiration() {
-        if (session.credentials?.arl?.isEmpty() == true || session.arlExpired) {
-            if (session.credentials?.email?.isEmpty() == true || session.credentials?.pass?.isEmpty() == true) {
+        if (session.credentials.arl.isEmpty() || session.arlExpired) {
+            if (session.credentials.email.isEmpty() || session.credentials.pass.isEmpty()) {
                 throw ClientException.LoginRequired()
             } else {
                 api.makeUser()
