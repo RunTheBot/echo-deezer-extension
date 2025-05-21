@@ -27,41 +27,44 @@ class DeezerLibraryClient(private val deezerExtension: DeezerExtension, private 
         Tab("shows", "Podcasts")
     )
 
-    suspend fun getLibraryTabs(): List<Tab> {
+    suspend fun getLibraryTabs(retry: Int = 3): List<Tab> {
         deezerExtension.handleArlExpiration()
 
-        try {
-            allTabs = "all" to supervisorScope {
-                tabs.map { tab ->
-                    async(Dispatchers.IO) {
-                        val jsonObject = when (tab.id) {
-                            "playlists" -> api.getPlaylists()
-                            "albums" -> api.getAlbums()
-                            "tracks" -> api.getTracks()
-                            "artists" -> api.getArtists()
-                            "shows" -> api.getShows()
-                            else -> null
-                        } ?: return@async null
-                        val resultObject = jsonObject["results"]?.jsonObject ?: return@async null
-                        val dataArray = when (tab.id) {
-                            "playlists", "albums", "artists", "shows" -> {
-                                val tabObject =
-                                    resultObject["TAB"]?.jsonObject?.get(tab.id)?.jsonObject
-                                tabObject?.get("data")?.jsonArray
+        if (retry != 0) {
+            try {
+                allTabs = "all" to supervisorScope {
+                    tabs.map { tab ->
+                        async(Dispatchers.Default) {
+                            val jsonObject = when (tab.id) {
+                                "playlists" -> api.getPlaylists()
+                                "albums" -> api.getAlbums()
+                                "tracks" -> api.getTracks()
+                                "artists" -> api.getArtists()
+                                "shows" -> api.getShows()
+                                else -> null
+                            } ?: return@async null
+                            val resultObject =
+                                jsonObject["results"]?.jsonObject ?: return@async null
+                            val dataArray = when (tab.id) {
+                                "playlists", "albums", "artists", "shows" -> {
+                                    val tabObject =
+                                        resultObject["TAB"]?.jsonObject?.get(tab.id)?.jsonObject
+                                    tabObject?.get("data")?.jsonArray
+                                }
+
+                                "tracks" -> resultObject["data"]?.jsonArray
+                                else -> return@async null
                             }
+                            parser.run {
+                                dataArray?.toShelfItemsList(tab.title)
+                            }
+                        }
+                    }.mapNotNull { it.await() }
+                }
 
-                            "tracks" -> resultObject["data"]?.jsonArray
-                            else -> return@async null
-                        }
-                        parser.run {
-                            dataArray?.toShelfItemsList(tab.title)
-                        }
-                    }
-                }.awaitAll().filterNotNull()
+            } catch (e: Exception) {
+                getLibraryTabs(retry - 1)
             }
-
-        } catch (e: Exception) {
-            getLibraryTabs()
         }
 
         return listOf(Tab("all", "All")) + tabs

@@ -5,6 +5,9 @@ import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import dev.brahmkshatriya.echo.extension.DeezerExtension
 import dev.brahmkshatriya.echo.extension.DeezerParser
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.supervisorScope
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -17,30 +20,36 @@ class DeezerHomeFeedClient(private val deezerExtension: DeezerExtension, private
         val homePageResults = api.page("home")["results"]?.jsonObject
         val homeSections = homePageResults?.get("sections")?.jsonArray ?: JsonArray(emptyList())
 
-        homeSections.mapNotNull { section ->
-            val id = section.jsonObject["module_id"]!!.jsonPrimitive.content
-            when (id) {
-                in ITEM_MODULE_IDS -> {
-                    parser.run {
-                        section.toShelfItemsList(section.jsonObject["title"]!!.jsonPrimitive.content)
-                    }
-                }
-
-                CATEGORY_MODULE_ID -> {
-                    parser.run {
-                        section.toShelfCategoryList(
-                            section.jsonObject["title"]!!.jsonPrimitive.content,
-                            shelf
-                        ) { target ->
-                            deezerExtension.channelFeed(target)
+        supervisorScope {
+            homeSections.mapNotNull { section ->
+                async(Dispatchers.Default) {
+                    val obj = section.jsonObject
+                    val id = obj["module_id"]?.jsonPrimitive?.content
+                    when (id) {
+                        in ITEM_MODULE_IDS -> {
+                            parser.run {
+                                section.toShelfItemsList(
+                                    obj["title"]!!.jsonPrimitive.content
+                                )
+                            }
                         }
+                        CATEGORY_MODULE_ID -> {
+                            parser.run {
+                                section.toShelfCategoryList(
+                                    obj["title"]!!.jsonPrimitive.content,
+                                    shelf
+                                ) { target ->
+                                    deezerExtension.channelFeed(target)
+                                }
+                            }
+                        }
+                        else -> null
                     }
                 }
-
-                else -> null
-            }
+            }.mapNotNull { it.await() }
         }
     }
+
     companion object {
         private val ITEM_MODULE_IDS = setOf(
             "b21892d3-7e9c-4b06-aff6-2c3be3266f68", "348128f5-bed6-4ccb-9a37-8e5f5ed08a62",

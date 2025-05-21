@@ -146,7 +146,6 @@ object LocalAudioServer {
 
         val request = Request.Builder()
             .url(deezerUrl)
-            .header("User-Agent", "Mozilla/5.0 etc...")
             .header("Range", rangeValue)
             .build()
 

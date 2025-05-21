@@ -28,9 +28,7 @@ import kotlinx.serialization.json.putJsonObject
 import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.Interceptor
 import okhttp3.OkHttpClient
-import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -86,20 +84,28 @@ class DeezerApi(private val session: DeezerSession) {
         get() = credentials.pass
 
     private fun createOkHttpClient(useProxy: Boolean, login: Boolean = false): OkHttpClient {
+        val configuredProxy = session.settings
+            ?.getString("proxy")
+            .takeIf { !it.isNullOrEmpty() }
         return OkHttpClient.Builder().apply {
             addInterceptor { chain ->
-                val originalResponse = chain.proceed(chain.request())
-                if (originalResponse.header("Content-Encoding") == "gzip") {
-                    val gzipSource = GZIPInputStream(originalResponse.body.byteStream())
-                    val decompressedBody = gzipSource.readBytes()
-                        .toResponseBody(originalResponse.body.contentType())
-                    originalResponse.newBuilder().body(decompressedBody).build()
+                val response = chain.proceed(chain.request())
+                if (response.header("Content-Encoding") == "gzip") {
+                    val decompressedBytes = GZIPInputStream(response.body.byteStream()).use {
+                        it.readBytes()
+                    }
+                    val contentType = response.body.contentType()
+                    val newBody = decompressedBytes.toResponseBody(contentType)
+                    response.newBuilder()
+                        .removeHeader("Content-Encoding")
+                        .body(newBody)
+                        .build()
                 } else {
-                    originalResponse
+                    response
                 }
             }
-            if (useProxy && session.settings?.getString("proxy")?.isNotEmpty() == true) {
-                val proxy = if (login) "uk.proxy.murglar.app" else session.settings?.getString("proxy").orEmpty()
+            if (useProxy && configuredProxy != null) {
+                val proxy = if (login) "uk.proxy.murglar.app" else configuredProxy
                 sslSocketFactory(createTrustAllSslSocketFactory(), createTrustAllTrustManager())
                 hostnameVerifier { _, _ -> true }
                 proxy(
@@ -135,14 +141,14 @@ class DeezerApi(private val session: DeezerSession) {
     private val staticHeaders: Headers by lazy {
         Headers.Builder().apply {
             add("Accept", "*/*")
-            add("Accept-Charset", "utf-8,ISO-8859-1;q=0.7,*;q=0.3")
             add("Accept-Encoding", "gzip")
-            add("Accept-Language", language)
+            add("Accept-Language", "$language,*")
             add("Cache-Control", "max-age=0")
             add("Connection", "keep-alive")
             add("Content-Language", language)
-            add("Content-Type", "application/json; charset=utf-8")
-            add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+            add("Content-Type", "application/json")
+            add("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36")
+            add("x-deezer-user", userId)
             add("X-User-IP", "1.1.1.1")
             add("x-deezer-client-ip", "1.1.1.1")
         }.build()
@@ -302,7 +308,7 @@ class DeezerApi(private val session: DeezerSession) {
             .headers(
                 Headers.headersOf(
                     "Cookie", "sid=$sid",
-                    "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                    "User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
                 )
             )
             .build()
