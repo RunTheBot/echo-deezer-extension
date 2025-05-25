@@ -18,6 +18,7 @@ import dev.brahmkshatriya.echo.common.clients.TrackLikeClient
 import dev.brahmkshatriya.echo.common.clients.TrackerClient
 import dev.brahmkshatriya.echo.common.helpers.ClientException
 import dev.brahmkshatriya.echo.common.helpers.PagedData
+import dev.brahmkshatriya.echo.common.helpers.WebViewRequest
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
@@ -25,6 +26,7 @@ import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.QuickSearchItem
 import dev.brahmkshatriya.echo.common.models.Radio
+import dev.brahmkshatriya.echo.common.models.Request
 import dev.brahmkshatriya.echo.common.models.Request.Companion.toRequest
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Streamable
@@ -32,6 +34,7 @@ import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.TrackDetails
 import dev.brahmkshatriya.echo.common.models.User
+import dev.brahmkshatriya.echo.common.providers.WebViewClientProvider
 import dev.brahmkshatriya.echo.common.settings.Setting
 import dev.brahmkshatriya.echo.common.settings.SettingCategory
 import dev.brahmkshatriya.echo.common.settings.SettingList
@@ -60,7 +63,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClient,
     SearchFeedClient, AlbumClient, ArtistClient, ArtistFollowClient, PlaylistClient, LyricsClient, ShareClient,
-    TrackerClient, LoginClient.WebView.Cookie, LoginClient.CustomInput,
+    TrackerClient, LoginClient.WebView, LoginClient.CustomInput,
     LibraryFeedClient, PlaylistEditClient, SaveToLibraryClient {
 
     private val session = DeezerSession.getInstance()
@@ -401,8 +404,21 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         return userList.first()
     }
 
-    override val loginWebViewInitialUrl =
-        "https://www.deezer.com/login?redirect_type=page&redirect_link=%2Faccount%2F".toRequest(
+    override val webViewRequest = object : WebViewRequest.Cookie<List<User>> {
+        override suspend fun onStop(url: Request, cookie: String): List<User> {
+            val arl = extractCookieValue(cookie, "arl")
+            val sid = extractCookieValue(cookie, "sid")
+            if (arl != null && sid != null) {
+                session.updateCredentials(arl = arl, sid = sid)
+                return api.makeUser()
+            } else if (cookie.isEmpty()) {
+                throw Exception("Ignore this")
+            } else {
+                throw Exception("Failed to retrieve ARL and SID from cookies")
+            }
+        }
+
+        override val initialUrl = "https://www.deezer.com/login?redirect_type=page&redirect_link=%2Faccount%2F".toRequest(
             mapOf(
                 Pair(
                     "User-Agent",
@@ -411,24 +427,11 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
             )
         )
 
-    override val loginWebViewStopUrlRegex = "https://www\\.deezer\\.com/account/.*".toRegex()
+        override val stopUrlRegex = "https://www\\.deezer\\.com/account/.*".toRegex()
 
-    override suspend fun onLoginWebviewStop(url: String, data: Map<String, String>): List<User> {
-        val fData = data.values.first()
-        val arl = extractCookieValue(fData, "arl")
-        val sid = extractCookieValue(fData, "sid")
-        if (arl != null && sid != null) {
-            session.updateCredentials(arl = arl, sid = sid)
-            return api.makeUser()
-        } else if (fData.isEmpty()) {
-            throw Exception("Ignore this")
-        } else {
-            throw Exception("Failed to retrieve ARL and SID from cookies")
+        private fun extractCookieValue(data: String, key: String): String? {
+            return data.substringAfter("$key=").substringBefore(";").takeIf { it.isNotEmpty() }
         }
-    }
-
-    private fun extractCookieValue(data: String, key: String): String? {
-        return data.substringAfter("$key=").substringBefore(";").takeIf { it.isNotEmpty() }
     }
 
     override val forms: List<LoginClient.Form> = listOf(
