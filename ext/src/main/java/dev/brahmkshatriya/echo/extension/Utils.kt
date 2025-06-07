@@ -193,9 +193,13 @@ fun getByteStreamAudio(
     client: OkHttpClient
 ): Streamable.Media {
     val contentLength = Utils.getContentLength(streamable.id, client)
-    return Streamable.Source.ByteStream(
-        stream = getInputStream(scope, streamable, client, contentLength),
-        totalBytes = contentLength
+    return Streamable.Source.Raw(
+        { _, _ ->
+            Pair(
+                getInputStream(scope, streamable, client, contentLength),
+                contentLength
+            )
+        }
     ).toMedia()
 }
 
