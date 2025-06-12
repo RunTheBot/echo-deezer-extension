@@ -65,9 +65,9 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
     TrackerClient, LoginClient.WebView, LoginClient.CustomInput,
     LibraryFeedClient, PlaylistEditClient, SaveToLibraryClient {
 
-    private val session = DeezerSession.getInstance()
-    private val api = DeezerApi(session)
-    private val parser = DeezerParser(session)
+    private val session by lazy { DeezerSession.getInstance() }
+    private val api by lazy { DeezerApi(session) }
+    private val parser by lazy { DeezerParser(session) }
 
     override val settingItems: List<Setting>
         get() = listOf(

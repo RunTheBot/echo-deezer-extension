@@ -28,19 +28,98 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media {
-        deezerExtension.handleArlExpiration()
-        return if (streamable.quality == 12) {
-            streamable.id.toSource().toMedia()
-        } else {
-            if(isDownload) {
-                getByteStreamAudio(scope, streamable, client)
-            } else {
-                localAudioServer.addTrack(streamable, scope, client)
-                localAudioServer.getStreamUrlForTrack(streamable.id, scope, client).toSource().toMedia()
+    private fun extractUrlFromJson(json: JsonObject): String? {
+        val data = json["data"]?.jsonArray?.firstOrNull()?.jsonObject ?: return null
+        val media = data["media"]?.jsonArray?.firstOrNull()?.jsonObject ?: return null
+        val source = media["sources"]?.jsonArray?.getOrNull(1)?.jsonObject
+            ?: media["sources"]?.jsonArray?.firstOrNull()?.jsonObject
+            ?: return null
+        return source["url"]?.jsonPrimitive?.content
+    }
+
+    private suspend fun createStreamableForQuality(track: Track, quality: String): Streamable? {
+        return try {
+            val currentTrackId = track.id
+            val mediaJson = if (quality != "128" || track.extras["TRACK_TOKEN"]?.isEmpty() == true) api.getMediaUrl(track, quality) else api.getMP3MediaUrl(track, true)
+            val trackJsonData = mediaJson["data"]?.jsonArray?.firstOrNull()?.jsonObject
+            val mediaIsEmpty = trackJsonData?.get("media")?.jsonArray?.isEmpty() == true
+
+            val (finalUrl, fallbackTrack) = when {
+                mediaJson.toString().contains("Track token has no sufficient rights on requested media") || mediaIsEmpty -> {
+                    val fallbackParsed = track.copy(id = track.extras["FALLBACK_ID"].orEmpty())
+                    val fallbackMediaJson = api.getMediaUrl(fallbackParsed, quality)
+                    val url = extractUrlFromJson(fallbackMediaJson) ?: return null
+                    url to fallbackParsed
+                }
+
+                else -> {
+                    val url = extractUrlFromJson(mediaJson) ?: return null
+                    url to null
+                }
+            }
+
+            val qualityValue = when (quality) {
+                "flac" -> 9
+                "320" -> 6
+                "128" -> 3
+                else -> 0
+            }
+            val qualityTitle = when (quality) {
+                "flac" -> "FLAC"
+                "320" -> "320kbps"
+                "128" -> "128kbps"
+                else -> "UNKNOWN"
+            }
+            val keySourceId = fallbackTrack?.id ?: currentTrackId
+
+            Streamable.server(
+                id = finalUrl,
+                quality = qualityValue,
+                title = qualityTitle,
+                extras = mapOf("key" to Utils.createBlowfishKey(keySourceId))
+            )
+        } catch (e: Exception) {
+            when (quality) {
+                "flac" -> createStreamableForQuality(track, "320")
+                "320" -> createStreamableForQuality(track, "128")
+                "128" -> throw Exception("Song not available")
+                else -> throw Exception("Song not available")
             }
         }
     }
+
+    suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media {
+        deezerExtension.handleArlExpiration()
+        val resolvedStreamable = if (streamable.id.startsWith(placeholderPrefix)) {
+            val info = streamable.id.removePrefix(placeholderPrefix).split(":")
+            val trackId = info[0]
+            val quality = info.getOrNull(1) ?: "128"
+            val newTrack = Track(
+                id = trackId,
+                title = quality,
+                extras = mapOf(
+                    "TRACK_TOKEN" to streamable.extras["TRACK_TOKEN"].orEmpty(),
+                    "FALLBACK_ID" to streamable.extras["FALLBACK_ID"].orEmpty()
+                )
+            )
+            createStreamableForQuality(newTrack, quality) ?: streamable
+        } else {
+            streamable
+        }
+
+        return if (resolvedStreamable.quality == 12) {
+            resolvedStreamable.id.toSource().toMedia()
+        } else {
+            if (isDownload) {
+                getByteStreamAudio(scope, resolvedStreamable, client)
+            } else {
+                localAudioServer.addTrack(resolvedStreamable, scope, client)
+                localAudioServer.getStreamUrlForTrack(resolvedStreamable.id, scope, client).toSource().toMedia()
+            }
+        }
+    }
+
+    private val qualityOptions = listOf("flac", "320", "128")
 
     suspend fun loadTrack(track: Track): Track {
         deezerExtension.handleArlExpiration()
@@ -49,97 +128,50 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
             return track
         }
 
-        fun extractUrlFromJson(json: JsonObject): String? {
-            val data = json["data"]?.jsonArray?.firstOrNull()?.jsonObject ?: return null
-            val media = data["media"]?.jsonArray?.firstOrNull()?.jsonObject ?: return null
-            val source = media["sources"]?.jsonArray?.getOrNull(1)?.jsonObject
-                ?: media["sources"]?.jsonArray?.firstOrNull()?.jsonObject
-                ?: return null
-            return source["url"]?.jsonPrimitive?.content
-        }
-
         val originalTrackId = track.id
         val isMp3Misc = track.extras["FILESIZE_MP3_MISC"]?.let { it != "0" } ?: false
 
-        return if (isMp3Misc) {
-            val mediaJson = api.getMP3MediaUrl(track, false)
-            val finalUrl = extractUrlFromJson(mediaJson)
-
-            if (finalUrl == null) {
-                track.copy(isLiked = isTrackLiked(originalTrackId), streamables = emptyList())
-            } else {
-                track.copy(
-                    isLiked = isTrackLiked(originalTrackId),
-                    streamables = listOf(
-                        Streamable.server(
-                            id = finalUrl,
-                            quality = 0,
-                            title = "MP3",
-                            extras = mapOf("key" to Utils.createBlowfishKey(originalTrackId))
-                        )
+        val streamables = if (isMp3Misc) {
+            listOf(
+                Streamable.server(
+                    id = "$placeholderPrefix${track.id}:mp3",
+                    quality = 0,
+                    title = "MP3",
+                    extras = mapOf(
+                        "TRACK_TOKEN" to track.extras["TRACK_TOKEN"].orEmpty(),
+                        "FALLBACK_ID" to track.extras["FALLBACK_ID"].orEmpty()
+                    )
+                )
+            )
+        } else {
+            qualityOptions.map { quality ->
+                val qualityValue = when (quality) {
+                    "flac" -> 9
+                    "320" -> 6
+                    "128" -> 3
+                    else -> 0
+                }
+                val qualityTitle = when (quality) {
+                    "flac" -> "FLAC"
+                    "320" -> "320kbps"
+                    "128" -> "128kbps"
+                    else -> "UNKNOWN"
+                }
+                Streamable.server(
+                    id = "$placeholderPrefix${track.id}:$quality",
+                    quality = qualityValue,
+                    title = qualityTitle,
+                    extras = mapOf(
+                        "TRACK_TOKEN" to track.extras["TRACK_TOKEN"].orEmpty(),
+                        "FALLBACK_ID" to track.extras["FALLBACK_ID"].orEmpty()
                     )
                 )
             }
-        } else {
-            val qualityOptions = listOf("flac", "320", "128")
-
-            suspend fun createStreamableForQuality(quality: String): Streamable? {
-                return try {
-                    val currentTrackId = track.id
-                    val mediaJson = if(quality != "128") api.getMediaUrl(track, quality) else api.getMP3MediaUrl(track, true)
-                    val trackJsonData = mediaJson["data"]?.jsonArray?.firstOrNull()?.jsonObject
-                    val mediaIsEmpty = trackJsonData?.get("media")?.jsonArray?.isEmpty() == true
-
-                    val (finalUrl, fallbackTrack) = when {
-                        mediaJson.toString().contains("Track token has no sufficient rights on requested media") || mediaIsEmpty -> {
-                            val fallbackParsed = track.copy(id = track.extras["FALLBACK_ID"].orEmpty())
-                            val fallbackMediaJson = api.getMediaUrl(fallbackParsed, quality)
-                            val url = extractUrlFromJson(fallbackMediaJson) ?: return null
-                            url to fallbackParsed
-                        }
-
-                        else -> {
-                            val url = extractUrlFromJson(mediaJson) ?: return null
-                            url to null
-                        }
-                    }
-
-                    val qualityValue = when (quality) {
-                        "flac" -> 9
-                        "320" -> 6
-                        "128" -> 3
-                        else -> 0
-                    }
-                    val qualityTitle = when (quality) {
-                        "flac" -> "FLAC"
-                        "320" -> "320kbps"
-                        "128" -> "128kbps"
-                        else -> "UNKNOWN"
-                    }
-                    val keySourceId = fallbackTrack?.id ?: currentTrackId
-
-                    Streamable.server(
-                        id = finalUrl,
-                        quality = qualityValue,
-                        title = qualityTitle,
-                        extras = mapOf("key" to Utils.createBlowfishKey(keySourceId))
-                    )
-                } catch (e: Exception) {
-                    null
-                }
-            }
-
-            val streamables = supervisorScope {
-                qualityOptions.map { quality ->
-                    async(Dispatchers.IO) { createStreamableForQuality(quality) }
-                }.awaitAll().filterNotNull()
-            }
-
-            track.copy(
-                isLiked = isTrackLiked(originalTrackId),
-                streamables = streamables
-            )
         }
+        return track.copy(
+            isLiked = isTrackLiked(originalTrackId),
+            streamables = streamables
+        )
     }
 
     private suspend fun isTrackLiked(id: String): Boolean {
@@ -149,4 +181,6 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
         val trackIds = dataArray.mapNotNull { it.jsonObject["SNG_ID"]?.jsonPrimitive?.content }.toSet()
         return id in trackIds
     }
+
+    private val placeholderPrefix = "dzp:"
 }
