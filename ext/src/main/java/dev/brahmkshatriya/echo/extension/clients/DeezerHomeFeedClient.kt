@@ -1,6 +1,8 @@
 package dev.brahmkshatriya.echo.extension.clients
 
 import dev.brahmkshatriya.echo.common.helpers.PagedData
+import dev.brahmkshatriya.echo.common.models.Feed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import dev.brahmkshatriya.echo.extension.DeezerExtension
@@ -15,7 +17,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 class DeezerHomeFeedClient(private val deezerExtension: DeezerExtension, private val api: DeezerApi, private val parser: DeezerParser) {
 
-    fun getHomeFeed(shelf: String): PagedData<Shelf> = PagedData.Single {
+    fun getHomeFeed(shelf: String): Feed = PagedData.Single {
         deezerExtension.handleArlExpiration()
         val homePageResults = api.page("home")["results"]?.jsonObject
         val homeSections = homePageResults?.get("sections")?.jsonArray ?: JsonArray(emptyList())
@@ -48,7 +50,7 @@ class DeezerHomeFeedClient(private val deezerExtension: DeezerExtension, private
                 }
             }.mapNotNull { it.await() }
         }
-    }
+    }.toFeed()
 
     companion object {
         private val ITEM_MODULE_IDS = setOf(

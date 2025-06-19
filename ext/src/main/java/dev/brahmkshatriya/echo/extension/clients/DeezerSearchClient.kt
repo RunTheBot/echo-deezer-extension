@@ -1,6 +1,8 @@
 package dev.brahmkshatriya.echo.extension.clients
 
 import dev.brahmkshatriya.echo.common.helpers.PagedData
+import dev.brahmkshatriya.echo.common.models.Feed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
 import dev.brahmkshatriya.echo.common.models.QuickSearchItem
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Tab
@@ -55,7 +57,7 @@ class DeezerSearchClient(private val deezerExtension: DeezerExtension, private v
         }
     }
 
-    fun searchFeed(query: String, tab: Tab?, shelf: String): PagedData.Single<Shelf> = PagedData.Single {
+    fun searchFeed(query: String, tab: Tab?, shelf: String): Feed = PagedData.Single {
         deezerExtension.handleArlExpiration()
         query.ifBlank { return@Single browseFeed(shelf) }
 
@@ -83,7 +85,7 @@ class DeezerSearchClient(private val deezerExtension: DeezerExtension, private v
         }
 
         processSearchResults(resultObject ?: JsonObject(emptyMap()))
-    }
+    }.toFeed()
 
     private suspend fun browseFeed(shelf: String): List<Shelf> {
         deezerExtension.handleArlExpiration()

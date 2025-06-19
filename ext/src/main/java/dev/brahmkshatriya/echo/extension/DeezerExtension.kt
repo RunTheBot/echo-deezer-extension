@@ -22,6 +22,7 @@ import dev.brahmkshatriya.echo.common.helpers.WebViewRequest
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
+import dev.brahmkshatriya.echo.common.models.Feed
 import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.QuickSearchItem
@@ -158,7 +159,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun getHomeTabs(): List<Tab> = listOf()
 
-    override fun getHomeFeed(tab: Tab?): PagedData<Shelf> = deezerHomeFeedClient.getHomeFeed(shelf)
+    override fun getHomeFeed(tab: Tab?): Feed = deezerHomeFeedClient.getHomeFeed(shelf)
 
     //<============= Library =============>
 
@@ -166,7 +167,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun getLibraryTabs(): List<Tab> = deezerLibraryClient.getLibraryTabs()
 
-    override fun getLibraryFeed(tab: Tab?): PagedData.Single<Shelf> = deezerLibraryClient.getLibraryFeed(tab)
+    override fun getLibraryFeed(tab: Tab?): Feed = deezerLibraryClient.getLibraryFeed(tab)
 
     override suspend fun addTracksToPlaylist(
         playlist: Playlist,
@@ -304,7 +305,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun quickSearch(query: String): List<QuickSearchItem.Query> = deezerSearchClient.quickSearch(query)
 
-    override fun searchFeed(query: String, tab: Tab?): PagedData.Single<Shelf> = deezerSearchClient.searchFeed(query, tab, shelf)
+    override fun searchFeed(query: String, tab: Tab?): Feed = deezerSearchClient.searchFeed(query, tab, shelf)
 
     override suspend fun searchTabs(query: String): List<Tab> = deezerSearchClient.searchTabs(query)
 

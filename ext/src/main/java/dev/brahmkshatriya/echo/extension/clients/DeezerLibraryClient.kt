@@ -1,6 +1,8 @@
 package dev.brahmkshatriya.echo.extension.clients
 
 import dev.brahmkshatriya.echo.common.helpers.PagedData
+import dev.brahmkshatriya.echo.common.models.Feed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.extension.DeezerApi
@@ -69,7 +71,7 @@ class DeezerLibraryClient(private val deezerExtension: DeezerExtension, private 
         return listOf(Tab("all", "All")) + tabs
     }
 
-    fun getLibraryFeed(tab: Tab?): PagedData.Single<Shelf> = PagedData.Single {
+    fun getLibraryFeed(tab: Tab?): Feed = PagedData.Single {
         deezerExtension.handleArlExpiration()
 
         val tabId = tab?.id ?: "all"
@@ -83,7 +85,7 @@ class DeezerLibraryClient(private val deezerExtension: DeezerExtension, private 
             else -> emptyList()
         }
         list
-    }
+    }.toFeed()
 
     private suspend fun fetchData(apiCall: suspend () -> JsonObject): List<Shelf> {
         val jsonObject = apiCall()
