@@ -333,7 +333,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     private val deezerTrackClient = DeezerTrackClient(this, api)
 
-    override suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media = deezerTrackClient.loadStreamableMedia(streamable, isDownload)
+    override suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media = deezerTrackClient.loadStreamableMedia(streamable)
 
     override suspend fun loadTrack(track: Track): Track = deezerTrackClient.loadTrack(track)
 

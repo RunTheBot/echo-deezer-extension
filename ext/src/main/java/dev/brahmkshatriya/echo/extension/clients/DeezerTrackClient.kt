@@ -4,17 +4,10 @@ import dev.brahmkshatriya.echo.common.models.Streamable
 import dev.brahmkshatriya.echo.common.models.Streamable.Media.Companion.toMedia
 import dev.brahmkshatriya.echo.common.models.Streamable.Source.Companion.toSource
 import dev.brahmkshatriya.echo.common.models.Track
+import dev.brahmkshatriya.echo.extension.AudioStreamProvider
 import dev.brahmkshatriya.echo.extension.DeezerApi
 import dev.brahmkshatriya.echo.extension.DeezerExtension
-import dev.brahmkshatriya.echo.extension.LocalAudioServer
 import dev.brahmkshatriya.echo.extension.Utils
-import dev.brahmkshatriya.echo.extension.getByteStreamAudio
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.supervisorScope
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -24,9 +17,6 @@ import okhttp3.OkHttpClient
 class DeezerTrackClient(private val deezerExtension: DeezerExtension, private val api: DeezerApi) {
 
     private val client by lazy { OkHttpClient() }
-    private val localAudioServer by lazy { LocalAudioServer }
-
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private fun extractUrlFromJson(json: JsonObject): String? {
         val data = json["data"]?.jsonArray?.firstOrNull()?.jsonObject ?: return null
@@ -41,6 +31,7 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
         return try {
             val currentTrackId = track.id
             val mediaJson = if (quality != "128" || track.extras["TRACK_TOKEN"]?.isEmpty() == true) api.getMediaUrl(track, quality) else api.getMP3MediaUrl(track, true)
+            if (mediaJson.toString().contains("License token has no sufficient rights on requested media")) createStreamableForQuality(track, "128")
             val trackJsonData = mediaJson["data"]?.jsonArray?.firstOrNull()?.jsonObject
             val mediaIsEmpty = trackJsonData?.get("media")?.jsonArray?.isEmpty() == true
 
@@ -88,7 +79,7 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
         }
     }
 
-    suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media {
+    suspend fun loadStreamableMedia(streamable: Streamable): Streamable.Media {
         deezerExtension.handleArlExpiration()
         val resolvedStreamable = if (streamable.id.startsWith(placeholderPrefix)) {
             val info = streamable.id.removePrefix(placeholderPrefix).split(":")
@@ -110,12 +101,15 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
         return if (resolvedStreamable.quality == 12) {
             resolvedStreamable.id.toSource().toMedia()
         } else {
-            if (isDownload) {
-                getByteStreamAudio(scope, resolvedStreamable, client)
-            } else {
-                localAudioServer.addTrack(resolvedStreamable, scope, client)
-                localAudioServer.getStreamUrlForTrack(resolvedStreamable.id, scope, client).toSource().toMedia()
-            }
+            val contentLength = Utils.getContentLength(resolvedStreamable.id, client)
+            Streamable.Source.Raw(
+                { start, _ ->
+                    Pair(
+                        AudioStreamProvider.openStream(resolvedStreamable, client, start),
+                        contentLength - start
+                    )
+                }
+            ).toMedia()
         }
     }
 
