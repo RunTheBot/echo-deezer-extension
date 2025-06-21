@@ -30,7 +30,12 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
     private suspend fun createStreamableForQuality(track: Track, quality: String): Streamable? {
         return try {
             val currentTrackId = track.id
-            val mediaJson = if (quality != "128" || track.extras["TRACK_TOKEN"]?.isEmpty() == true) api.getMediaUrl(track, quality) else api.getMP3MediaUrl(track, true)
+            val mediaJson =
+                if ((quality != "128" && quality != "mp3") ||
+                    track.extras["TRACK_TOKEN"]?.isEmpty() == true
+                ) api.getMediaUrl(track, quality)
+                else api.getMP3MediaUrl(track, quality == "128")
+            println("FUCK YOU $mediaJson")
             if (mediaJson.toString().contains("License token has no sufficient rights on requested media")) createStreamableForQuality(track, "128")
             val trackJsonData = mediaJson["data"]?.jsonArray?.firstOrNull()?.jsonObject
             val mediaIsEmpty = trackJsonData?.get("media")?.jsonArray?.isEmpty() == true
