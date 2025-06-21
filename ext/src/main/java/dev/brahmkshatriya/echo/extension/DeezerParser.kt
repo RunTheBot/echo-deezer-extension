@@ -19,6 +19,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -233,6 +234,9 @@ class DeezerParser(private val session: DeezerSession) {
                 title = data["ALB_TITLE"]?.jsonPrimitive?.content.orEmpty(),
                 cover = getCover(md5, "cover")
             ),
+            albumNumber = data["TRACK_NUMBER"]?.jsonPrimitive?.content?.toLong(),
+            albumDiscNumber = data["DISK_NUMBER"]?.jsonPrimitive?.content?.toLong(),
+            irsc = data["ISRC"]?.jsonPrimitive?.content,
             isExplicit = data["EXPLICIT_LYRICS"]?.jsonPrimitive?.content?.equals("1") ?: false,
             extras = mapOf(
                 "FALLBACK_ID" to data["FALLBACK"]?.jsonObject?.get("SNG_ID")?.jsonPrimitive?.content.orEmpty(),
