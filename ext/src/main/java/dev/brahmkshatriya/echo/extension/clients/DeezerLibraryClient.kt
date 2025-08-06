@@ -17,7 +17,6 @@ import kotlinx.serialization.json.jsonObject
 
 class DeezerLibraryClient(private val deezerExtension: DeezerExtension, private val api: DeezerApi, private val parser: DeezerParser) {
 
-    @Volatile
     private var allTabs: Pair<String, List<Shelf>>? = null
 
     private val tabs = listOf(
@@ -28,44 +27,37 @@ class DeezerLibraryClient(private val deezerExtension: DeezerExtension, private 
         Tab("shows", "Podcasts")
     )
 
-    suspend fun getLibraryTabs(retry: Int = 3): List<Tab> {
+    suspend fun getLibraryTabs(): List<Tab> {
         deezerExtension.handleArlExpiration()
 
-        if (retry != 0) {
-            try {
-                allTabs = "all" to supervisorScope {
-                    tabs.map { tab ->
-                        async(Dispatchers.Default) {
-                            val jsonObject = when (tab.id) {
-                                "playlists" -> api.getPlaylists()
-                                "albums" -> api.getAlbums()
-                                "tracks" -> api.getTracks()
-                                "artists" -> api.getArtists()
-                                "shows" -> api.getShows()
-                                else -> null
-                            } ?: return@async null
-                            val resultObject =
-                                jsonObject["results"]?.jsonObject ?: return@async null
-                            val dataArray = when (tab.id) {
-                                "playlists", "albums", "artists", "shows" -> {
-                                    val tabObject =
-                                        resultObject["TAB"]?.jsonObject?.get(tab.id)?.jsonObject
-                                    tabObject?.get("data")?.jsonArray
-                                }
-
-                                "tracks" -> resultObject["data"]?.jsonArray
-                                else -> return@async null
-                            }
-                            parser.run {
-                                dataArray?.toShelfItemsList(tab.title)
-                            }
+        allTabs = "all" to supervisorScope {
+            tabs.map { tab ->
+                async(Dispatchers.Default) {
+                    val jsonObject = when (tab.id) {
+                        "playlists" -> api.getPlaylists()
+                        "albums" -> api.getAlbums()
+                        "tracks" -> api.getTracks()
+                        "artists" -> api.getArtists()
+                        "shows" -> api.getShows()
+                        else -> null
+                    } ?: return@async null
+                    val resultObject =
+                        jsonObject["results"]?.jsonObject ?: return@async null
+                    val dataArray = when (tab.id) {
+                        "playlists", "albums", "artists", "shows" -> {
+                            val tabObject =
+                                resultObject["TAB"]?.jsonObject?.get(tab.id)?.jsonObject
+                            tabObject?.get("data")?.jsonArray
                         }
-                    }.mapNotNull { it.await() }
-                }
 
-            } catch (e: Exception) {
-                getLibraryTabs(retry - 1)
-            }
+                        "tracks" -> resultObject["data"]?.jsonArray
+                        else -> return@async null
+                    }
+                    parser.run {
+                        dataArray?.toShelfItemsList(tab.title)
+                    }
+                }
+            }.mapNotNull { it.await() }
         }
 
         return listOf(Tab("all", "All")) + tabs

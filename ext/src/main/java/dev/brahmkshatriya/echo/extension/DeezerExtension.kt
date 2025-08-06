@@ -155,7 +155,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= HomeTab =============>
 
-    private val deezerHomeFeedClient = DeezerHomeFeedClient(this, api, parser)
+    private val deezerHomeFeedClient by lazy { DeezerHomeFeedClient(this, api, parser) }
 
     override suspend fun getHomeTabs(): List<Tab> = listOf()
 
@@ -163,7 +163,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Library =============>
 
-    private val deezerLibraryClient = DeezerLibraryClient(this, api, parser)
+    private val deezerLibraryClient by lazy { DeezerLibraryClient(this, api, parser) }
 
     override suspend fun getLibraryTabs(): List<Tab> = deezerLibraryClient.getLibraryTabs()
 
@@ -255,22 +255,6 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
     }
 
     override suspend fun isSavedToLibrary(mediaItem: EchoMediaItem): Boolean {
-        suspend fun isItemSaved(
-            getItems: suspend () -> JsonObject,
-            idKey: String,
-            itemId: String
-        ): Boolean {
-            val dataArray = getItems()["results"]?.jsonObject
-                ?.get("TAB")?.jsonObject
-                ?.values?.firstOrNull()?.jsonObject
-                ?.get("data")?.jsonArray ?: return false
-
-            return dataArray.any { item ->
-                val id = item.jsonObject[idKey]?.jsonPrimitive?.content
-                id == itemId
-            }
-        }
-
         return when (mediaItem) {
             is EchoMediaItem.Lists.AlbumItem -> {
                 isItemSaved(api::getAlbums, "ALB_ID", mediaItem.album.id)
@@ -280,7 +264,31 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
                 isItemSaved(api::getPlaylists, "PLAYLIST_ID", mediaItem.playlist.id)
             }
 
+            is EchoMediaItem.TrackItem -> {
+                isItemSaved(api::getTracks, "SNG_ID", mediaItem.track.id)
+            }
+
             else -> false
+        }
+    }
+
+    private suspend fun isItemSaved(
+        getItems: suspend () -> JsonObject,
+        idKey: String,
+        itemId: String
+    ): Boolean {
+        val dataObject = getItems()["results"]?.jsonObject
+        val dataArray = if (idKey == "SNG_ID") {
+            dataObject?.get("data")?.jsonArray ?: return false
+
+        } else {
+            dataObject?.get("TAB")?.jsonObject
+                ?.values?.firstOrNull()?.jsonObject
+                ?.get("data")?.jsonArray ?: return false
+        }
+        return dataArray.any { item ->
+            val id = item.jsonObject[idKey]?.jsonPrimitive?.content
+            id == itemId
         }
     }
 
@@ -295,13 +303,17 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
                 if (save) api.addFavoritePlaylist(mediaItem.playlist.id) else api.removeFavoritePlaylist(mediaItem.playlist.id)
             }
 
+            is EchoMediaItem.TrackItem -> {
+                if (save) api.addFavoriteTrack(mediaItem.track.id) else api.removeFavoriteTrack(mediaItem.track.id)
+            }
+
             else -> {}
         }
     }
 
     //<============= Search =============>
 
-    private val deezerSearchClient = DeezerSearchClient(this, api, history, parser)
+    private val deezerSearchClient by lazy { DeezerSearchClient(this, api, history, parser) }
 
     override suspend fun quickSearch(query: String): List<QuickSearchItem.Query> = deezerSearchClient.quickSearch(query)
 
@@ -331,7 +343,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Play =============>
 
-    private val deezerTrackClient = DeezerTrackClient(this, api)
+    private val deezerTrackClient by lazy { DeezerTrackClient(this, api) }
 
     override suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media = deezerTrackClient.loadStreamableMedia(streamable)
 
@@ -341,7 +353,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Radio =============>
 
-    private val deezerRadioClient = DeezerRadioClient(api, parser)
+    private val deezerRadioClient by lazy { DeezerRadioClient(api, parser) }
 
     override fun loadTracks(radio: Radio): PagedData<Track> = deezerRadioClient.loadTracks(radio)
 
@@ -359,7 +371,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Lyrics =============>
 
-    private val deezerLyricsClient = DeezerLyricsClient(api)
+    private val deezerLyricsClient by lazy { DeezerLyricsClient(api) }
 
     override suspend fun loadLyrics(lyrics: Lyrics): Lyrics = lyrics
 
@@ -367,7 +379,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Album =============>
 
-    private val deezerAlbumClient = DeezerAlbumClient(this, api, parser)
+    private val deezerAlbumClient by lazy { DeezerAlbumClient(this, api, parser) }
 
     override fun getShelves(album: Album): PagedData.Single<Shelf> = getShelves(album.artists.first())
 
@@ -377,7 +389,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Playlist =============>
 
-    private val deezerPlaylistClient = DeezerPlaylistClient(this, api, parser)
+    private val deezerPlaylistClient by lazy { DeezerPlaylistClient(this, api, parser) }
 
     override fun getShelves(playlist: Playlist): PagedData.Single<Shelf> = deezerPlaylistClient.getShelves(playlist)
 
@@ -387,7 +399,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     //<============= Artist =============>
 
-    private val deezerArtistClient = DeezerArtistClient(this, api, parser)
+    private val deezerArtistClient by lazy { DeezerArtistClient(this, api, parser) }
 
     override fun getShelves(artist: Artist): PagedData.Single<Shelf> = deezerArtistClient.getShelves(artist)
 
@@ -404,14 +416,15 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         return userList.first()
     }
 
-    override val webViewRequest = object : WebViewRequest.Cookie<List<User>> {
-        override suspend fun onStop(url: Request, cookie: String): List<User> {
-            val arl = extractCookieValue(cookie, "arl")
-            val sid = extractCookieValue(cookie, "sid")
+    override val webViewRequest = object : WebViewRequest.Headers<List<User>> {
+        override suspend fun onStop(requests: List<Request>): List<User> {
+            val data = requests.first().headers
+            val arl = extractCookieValue(data, "arl")
+            val sid = extractCookieValue(data, "sid")
             if (arl != null && sid != null) {
                 session.updateCredentials(arl = arl, sid = sid)
                 return api.makeUser()
-            } else if (cookie.isEmpty()) {
+            } else if (data.isEmpty()) {
                 throw Exception("Ignore this")
             } else {
                 throw Exception("Failed to retrieve ARL and SID from cookies")
@@ -421,16 +434,19 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         override val initialUrl = "https://www.deezer.com/login?redirect_type=page&redirect_link=%2Faccount%2F".toRequest(
             mapOf(
                 Pair(
-                    "User-Agent",
+                    "user-agent",
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
                 )
             )
         )
 
+        override val interceptUrlRegex = "https://www\\.deezer\\.com/ajax/gw-light\\.php\\?method=deezer_userAuth.*".toRegex()
+
+
         override val stopUrlRegex = "https://www\\.deezer\\.com/account/.*".toRegex()
 
-        private fun extractCookieValue(data: String, key: String): String? {
-            return data.substringAfter("$key=").substringBefore(";").takeIf { it.isNotEmpty() }
+        private fun extractCookieValue(data: Map<String,String>, key: String): String? {
+            return data["cookie"]?.substringAfter("$key=")?.substringBefore(";").takeIf { it?.isNotEmpty() == true }
         }
     }
 

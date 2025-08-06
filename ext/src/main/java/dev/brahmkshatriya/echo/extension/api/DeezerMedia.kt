@@ -19,7 +19,7 @@ class DeezerMedia(private val deezerApi: DeezerApi, private val clientNP: OkHttp
 
     suspend fun getMP3MediaUrl(track: Track, arl: String, sid: String, licenseToken: String, is128: Boolean): JsonObject {
         val headers = Headers.Builder().apply {
-            add("Accept-Encoding", "gzip")
+            //add("Accept-Encoding", "gzip")
             add("Accept-Language", deezerApi.langCode)
             add("Cache-Control", "max-age=0")
             add("Connection", "Keep-alive")

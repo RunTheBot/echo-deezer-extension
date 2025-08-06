@@ -19,7 +19,6 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.long
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -201,50 +200,38 @@ class DeezerParser(private val session: DeezerSession) {
 
     fun JsonObject.toTrack(): Track {
         val data = this["data"]?.jsonObject ?: this
-        val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content.orEmpty()
-        val artistArray = data["ARTISTS"]?.jsonArray.orEmpty()
-        val version = data["VERSION"]?.jsonPrimitive?.content.orEmpty()
-        val date = data["DATE_ADD"]?.jsonPrimitive?.content
-        val releaseData = if (date?.contains("-") == true) {
-            date.toDate()
-        } else {
-            date?.toLong()?.toDate()
-        }
+        val md5 = data["ALB_PICTURE"]?.jsonPrimitive?.content
+        val artistArray = data["ARTISTS"]?.jsonArray
+        val version = data["VERSION"]?.jsonPrimitive?.content
         return Track(
             id = data["SNG_ID"]?.jsonPrimitive?.content.orEmpty(),
-            title = data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty() + if(version.isNotEmpty()) { " $version" } else { "" } ,
+            title = buildString {
+                append(data["SNG_TITLE"]?.jsonPrimitive?.content.orEmpty())
+                if (!version.isNullOrEmpty()) {
+                    append(" ")
+                    append(version)
+                }
+            },
             cover = getCover(md5, "cover"),
             duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
-            releaseDate = releaseData,
-            artists = if (artistArray.isNotEmpty())
-                artistArray.map { artistObject ->
-                Artist(
-                    id = artistObject.jsonObject["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
-                    name = artistObject.jsonObject["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
-                    cover = getCover(artistObject.jsonObject["ART_PICTURE"]?.jsonPrimitive?.content.orEmpty(), "artist")
-                )
-            } else listOf(
-                Artist(
-                    id = data.jsonObject["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
-                    name = data.jsonObject["ART_NAME"]?.jsonPrimitive?.content.orEmpty()
-                )
-            ),
+            releaseDate = data["DATE_ADD"]?.jsonPrimitive?.content?.let { parseDate(it) },
+            artists = parseArtists(artistArray, data),
             album = Album(
                 id = data["ALB_ID"]?.jsonPrimitive?.content.orEmpty(),
                 title = data["ALB_TITLE"]?.jsonPrimitive?.content.orEmpty(),
                 cover = getCover(md5, "cover")
             ),
-            albumNumber = data["TRACK_NUMBER"]?.jsonPrimitive?.content?.toLong(),
-            albumDiscNumber = data["DISK_NUMBER"]?.jsonPrimitive?.content?.toLong(),
+            albumNumber = data["TRACK_NUMBER"]?.jsonPrimitive?.content?.toLongOrNull(),
+            albumDiscNumber = data["DISK_NUMBER"]?.jsonPrimitive?.content?.toLongOrNull(),
             irsc = data["ISRC"]?.jsonPrimitive?.content,
-            isExplicit = data["EXPLICIT_LYRICS"]?.jsonPrimitive?.content?.equals("1") ?: false,
-            extras = mapOf(
-                "FALLBACK_ID" to data["FALLBACK"]?.jsonObject?.get("SNG_ID")?.jsonPrimitive?.content.orEmpty(),
-                "TRACK_TOKEN" to data["TRACK_TOKEN"]?.jsonPrimitive?.content.orEmpty(),
-                "FILESIZE_MP3_MISC" to (data["FILESIZE_MP3_MISC"]?.jsonPrimitive?.content ?: "0"),
-                "MD5" to md5,
-                "TYPE" to "cover"
-            )
+            isExplicit = data["EXPLICIT_LYRICS"]?.jsonPrimitive?.content == "1",
+            extras = buildMap {
+                put("FALLBACK_ID", data["FALLBACK"]?.jsonObject?.get("SNG_ID")?.jsonPrimitive?.content.orEmpty())
+                put("TRACK_TOKEN", data["TRACK_TOKEN"]?.jsonPrimitive?.content.orEmpty())
+                put("FILESIZE_MP3_MISC", data["FILESIZE_MP3_MISC"]?.jsonPrimitive?.content ?: "0")
+                put("MD5", md5.orEmpty())
+                put("TYPE", "cover")
+            }
         )
     }
 
@@ -253,29 +240,18 @@ class DeezerParser(private val session: DeezerSession) {
         val md5 = data["PLAYLIST_PICTURE"]?.jsonPrimitive?.content.orEmpty()
         val userID = data["PARENT_USER_ID"]?.jsonPrimitive?.content
         val userSID = session.credentials.userId
+        val tracks = this["SONGS"]?.jsonObject?.get("total")?.jsonPrimitive?.int
+        val cd = data["DATE_ADD"]?.jsonPrimitive?.content?.toDate()
         return Playlist(
             id = data["PLAYLIST_ID"]?.jsonPrimitive?.content.orEmpty(),
             title = data["TITLE"]?.jsonPrimitive?.content.orEmpty(),
             cover = getCover(md5, type),
             description = data["DESCRIPTION"]?.jsonPrimitive?.content.orEmpty(),
-            subtitle = this["subtitle"]?.jsonPrimitive?.content,
+            subtitle = this["subtitle"]?.jsonPrimitive?.content ?: if (tracks != null && cd != null) "$tracks Songs • $cd" else if(tracks != null) "$tracks Songs" else cd?.toString(),
             isEditable = userID?.contains(userSID) == true,
-            tracks = data["NB_SONG"]?.jsonPrimitive?.int ?: 0,
-            creationDate = data["DATE_ADD"]?.jsonPrimitive?.content?.toDate(),
+            tracks = tracks,
+            creationDate = cd,
         )
-    }
-
-    private fun String.toDate(): EchoDate = EchoDate(
-        year = substringBefore("-").toInt(),
-        month = substringAfter("-").substringBeforeLast("-").toInt(),
-        day = substringAfterLast("-").substringBefore(" ").toInt()
-    )
-
-    private val simpleDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-
-    private fun Long.toDate(): EchoDate {
-        val date = Date(this * 1000)
-        return simpleDateFormat.format(date).toDate()
     }
 
     private fun JsonObject.toRadio(): Radio {
@@ -293,13 +269,57 @@ class DeezerParser(private val session: DeezerSession) {
         )
     }
 
-    private val quality: Int?
-        get() = session.settings?.getInt("image_quality")
+    private fun getCover(md5: String?, type: String?): ImageHolder? {
+        if (md5.isNullOrEmpty() || type.isNullOrEmpty()) {
+            return null
+        }
+        val size = session.settings?.getInt("image_quality") ?: 240
+        return "https://cdn-images.dzcdn.net/images/$type/$md5/${size}x${size}-000000-80-0-0.jpg"
+            .toImageHolder()
+    }
 
-    private fun getCover(md5: String?, type: String?): ImageHolder {
-        val size = quality ?: 240
-        val url = "https://cdn-images.dzcdn.net/images/$type/$md5/${size}x${size}-000000-80-0-0.jpg"
-        return url.toImageHolder()
+    private val simpleDateFormat by lazy { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+
+    private fun String.toDate(): EchoDate = EchoDate(
+        year = substringBefore("-").toInt(),
+        month = substringAfter("-").substringBeforeLast("-").toInt(),
+        day = substringAfterLast("-").substringBefore(" ").toInt()
+    )
+
+    private fun Long.toDate(): EchoDate {
+        val date = Date(this * 1000)
+        return simpleDateFormat.format(date).toDate()
+    }
+
+    private fun parseDate(dateStr: String): EchoDate? {
+        return if (dateStr.contains("-")) {
+            dateStr.toDate()
+        } else {
+            dateStr.toLongOrNull()?.toDate()
+        }
+    }
+
+    private fun parseArtists(artistArray: JsonArray?, data: JsonObject): List<Artist> {
+        return if (!artistArray.isNullOrEmpty()) {
+            artistArray.mapNotNull { element ->
+                val obj = element.jsonObject
+                Artist(
+                    id = obj["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
+                    name = obj["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
+                    cover = getCover(
+                        obj["ART_PICTURE"]?.jsonPrimitive?.content,
+                        "artist"
+                    )
+                )
+            }
+        } else {
+            listOf(
+                Artist(
+                    id = data["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
+                    name = data["ART_NAME"]?.jsonPrimitive?.content.orEmpty()
+                )
+            )
+        }
     }
 
     private inline fun <T> JsonArray.mapObjects(transform: (JsonObject) -> T?): List<T> =

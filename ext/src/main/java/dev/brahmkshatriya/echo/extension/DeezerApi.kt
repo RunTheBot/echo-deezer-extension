@@ -16,11 +16,13 @@ import dev.brahmkshatriya.echo.extension.api.DeezerTrack
 import dev.brahmkshatriya.echo.extension.api.DeezerUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -31,14 +33,13 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.internal.commonEmptyRequestBody
+import java.io.InputStream
 import java.math.BigInteger
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.security.MessageDigest
 import java.util.Locale
-import java.util.zip.GZIPInputStream
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManager
@@ -46,9 +47,12 @@ import javax.net.ssl.X509TrustManager
 
 class DeezerApi(private val session: DeezerSession) {
 
-    private val json = Json {
-        isLenient = true
-        ignoreUnknownKeys = true
+    companion object {
+        private val json = Json {
+            isLenient = true
+            ignoreUnknownKeys = true
+            useArrayPolymorphism = true
+        }
     }
 
     private val language: String
@@ -57,7 +61,7 @@ class DeezerApi(private val session: DeezerSession) {
     private val country: String
         get() = session.settings?.getString("country") ?: Locale.getDefault().country
 
-    val langCode by lazy { language.substringBefore("-") }
+    val langCode = language.substringBefore("-")
 
     private val credentials: DeezerCredentials
         get() = session.credentials
@@ -88,22 +92,6 @@ class DeezerApi(private val session: DeezerSession) {
             ?.getString("proxy")
             .takeIf { !it.isNullOrEmpty() }
         return OkHttpClient.Builder().apply {
-            addInterceptor { chain ->
-                val response = chain.proceed(chain.request())
-                if (response.header("Content-Encoding") == "gzip") {
-                    val decompressedBytes = GZIPInputStream(response.body.byteStream()).use {
-                        it.readBytes()
-                    }
-                    val contentType = response.body.contentType()
-                    val newBody = decompressedBytes.toResponseBody(contentType)
-                    response.newBuilder()
-                        .removeHeader("Content-Encoding")
-                        .body(newBody)
-                        .build()
-                } else {
-                    response
-                }
-            }
             if (useProxy && configuredProxy != null) {
                 val proxy = if (login) "uk.proxy.murglar.app" else configuredProxy
                 sslSocketFactory(createTrustAllSslSocketFactory(), createTrustAllTrustManager())
@@ -141,7 +129,6 @@ class DeezerApi(private val session: DeezerSession) {
     private val staticHeaders: Headers by lazy {
         Headers.Builder().apply {
             add("Accept", "*/*")
-            add("Accept-Encoding", "gzip")
             add("Accept-Language", "$language,*")
             add("Cache-Control", "max-age=0")
             add("Connection", "keep-alive")
@@ -200,8 +187,10 @@ class DeezerApi(private val session: DeezerSession) {
         val clientB = if (np) clientNP else client
 
         clientB.newCall(request).await().use { response ->
-            val responseBody = response.body.string()
-            if (!response.isSuccessful) throw Exception("API call failed with status ${response.code}: $responseBody")
+            val result = response.body.source().let {
+                decodeJsonStream(it.inputStream())
+            }
+            if (!response.isSuccessful) throw Exception("API call failed with status ${response.code}: $result")
 
             if (method == "deezer.getUserData") {
                 response.headers.forEach {
@@ -211,19 +200,25 @@ class DeezerApi(private val session: DeezerSession) {
                 }
             }
 
-            if (responseBody.contains("\"VALID_TOKEN_REQUIRED\":\"Invalid CSRF token\"")) {
-                if (email.isEmpty() && pass.isEmpty()) {
-                    session.isArlExpired(true)
-                    throw Exception("Please re-login (Best use User + Pass method)")
-                } else {
-                    session.isArlExpired(false)
-                    val userList = DeezerExtension().onLogin("userPass", mapOf(Pair("email", email), Pair("pass", pass)))
-                    DeezerExtension().onSetLoginUser(userList.first())
-                    return@withContext callApi(method, paramsBuilder, gatewayInput)
+            when(result["error"]) {
+                is JsonObject -> {
+                    if (result["error"]?.jsonObject["VALID_TOKEN_REQUIRED"]?.jsonPrimitive?.content?.contains("Invalid CSRF token") == true) {
+                        if (email.isEmpty() && pass.isEmpty()) {
+                            session.isArlExpired(true)
+                            throw Exception("Please re-login (Best use User + Pass method)")
+                        } else {
+                            session.isArlExpired(false)
+                            val userList = DeezerExtension().onLogin("userPass", mapOf(Pair("email", email), Pair("pass", pass)))
+                            DeezerExtension().onSetLoginUser(userList.first())
+                            return@withContext callApi(method, paramsBuilder, gatewayInput)
+                        }
+                    }
+                }
+                else -> {
+                    null
                 }
             }
-
-            decodeJson(responseBody)
+            result
         }
     }
 
@@ -242,7 +237,7 @@ class DeezerApi(private val session: DeezerSession) {
         val user = User(
             id = userId,
             name = name,
-            cover = "https://e-cdns-images.dzcdn.net/images/user/$cover/100x100-000000-80-0-0.jpg".toImageHolder(),
+            cover = "https://cdn-images.dzcdn.net/images/user/$cover/100x100-000000-80-0-0.jpg".toImageHolder(),
             extras = mapOf(
                 "arl" to arl,
                 "user_id" to userId,
@@ -336,7 +331,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Media =============>
 
-    private val deezerMedia = DeezerMedia(this, clientNP)
+    private val deezerMedia by lazy { DeezerMedia(this, clientNP) }
 
     suspend fun getMP3MediaUrl(track: Track, is128: Boolean): JsonObject = deezerMedia.getMP3MediaUrl(track, arl, sid, licenseToken, is128)
 
@@ -344,7 +339,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Search =============>
 
-    private val deezerSearch = DeezerSearch(this)
+    private val deezerSearch by lazy { DeezerSearch(this) }
 
     suspend fun search(query: String): JsonObject = deezerSearch.search(query)
 
@@ -358,7 +353,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Tracks =============>
 
-    private val deezerTrack = DeezerTrack(this)
+    private val deezerTrack by lazy { DeezerTrack(this) }
 
     suspend fun track(tracks: Array<Track>): JsonObject = deezerTrack.track(tracks)
 
@@ -370,7 +365,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Artists =============>
 
-    private val deezerArtist = DeezerArtist(this)
+    private val deezerArtist by lazy { DeezerArtist(this) }
 
     suspend fun artist(id: String): JsonObject = deezerArtist.artist(id)
 
@@ -382,7 +377,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Albums =============>
 
-    private val deezerAlbum = DeezerAlbum(this)
+    private val deezerAlbum by lazy { DeezerAlbum(this) }
 
     suspend fun album(album: Album): JsonObject = deezerAlbum.album(album)
 
@@ -421,7 +416,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Playlists =============>
 
-    private val deezerPlaylist = DeezerPlaylist(this)
+    private val deezerPlaylist by lazy { DeezerPlaylist(this) }
 
     suspend fun playlist(playlist: Playlist): JsonObject = deezerPlaylist.playlist(playlist)
 
@@ -445,7 +440,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Radios =============>
 
-    private val deezerRadio = DeezerRadio(this)
+    private val deezerRadio by lazy { DeezerRadio(this) }
 
     suspend fun mix(id: String): JsonObject = deezerRadio.mix(id)
 
@@ -496,17 +491,22 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Util =============>
 
-    private val deezerUtil = DeezerUtil(this)
+    private val deezerUtil by lazy { DeezerUtil(this) }
 
     suspend fun updateCountry() = deezerUtil.updateCountry(country)
 
     suspend fun log(track: Track) = deezerUtil.log(track, userId)
-    
-    suspend fun decodeJson(raw: String): JsonObject = withContext(Dispatchers.Default) {
+
+    @OptIn(ExperimentalSerializationApi::class)
+    private suspend fun decodeJsonStream(stream: InputStream) = withContext(Dispatchers.Default) {
+        json.decodeFromStream<JsonObject>(stream)
+    }
+
+    suspend fun decodeJson(raw: String): JsonObject = withContext(Dispatchers.IO) {
         json.decodeFromString<JsonObject>(raw)
     }
 
-    suspend fun encodeJson(raw: JsonObjectBuilder.() -> Unit = {}): String = withContext(Dispatchers.Default) {
+    suspend fun encodeJson(raw: JsonObjectBuilder.() -> Unit = {}): String = withContext(Dispatchers.IO) {
         json.encodeToString(buildJsonObject(raw))
     }
 }
