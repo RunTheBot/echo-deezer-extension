@@ -5,8 +5,18 @@ import java.util.concurrent.atomic.AtomicReference
 
 class DeezerSession(
     var settings: Settings? = null,
-    var arlExpired: Boolean = false
+    @Volatile var arlExpired: Boolean = false
 ) {
+
+    data class DeezerCredentials(
+        val arl: String,
+        val sid: String,
+        val token: String,
+        val userId: String,
+        val licenseToken: String,
+        val email: String,
+        val pass: String
+    )
 
     private val credentialsRef = AtomicReference(
         DeezerCredentials("", "", "", "", "", "", "")
@@ -53,13 +63,3 @@ class DeezerSession(
         }
     }
 }
-
-data class DeezerCredentials(
-    val arl: String,
-    val sid: String,
-    val token: String,
-    val userId: String,
-    val licenseToken: String,
-    val email: String,
-    val pass: String
-)

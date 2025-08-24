@@ -4,6 +4,8 @@ import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
+import dev.brahmkshatriya.echo.common.models.Feed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Radio
 import dev.brahmkshatriya.echo.common.models.Track
@@ -14,7 +16,7 @@ import kotlinx.serialization.json.jsonObject
 
 class DeezerRadioClient(private val api: DeezerApi, private val parser: DeezerParser) {
 
-    fun loadTracks(radio: Radio): PagedData<Track> = PagedData.Single {
+    fun loadTracks(radio: Radio): Feed<Track> = PagedData.Single {
         val dataArray = when (radio.extras["radio"]) {
             "track"-> {
                 val jsonObject = api.mix(radio.id)
@@ -42,13 +44,7 @@ class DeezerRadioClient(private val api: DeezerApi, private val parser: DeezerPa
             val nextTrack = parser.run { dataArray.getOrNull(index + 1)?.jsonObject?.toTrack() }
             val nextTrackId = nextTrack?.id
 
-            Track(
-                id = track.id,
-                title = track.title,
-                cover = track.cover,
-                duration = track.duration,
-                releaseDate = track.releaseDate,
-                artists = track.artists,
+            track.copy(
                 extras = track.extras.plus(
                     mapOf(
                         "NEXT" to (nextTrackId ?: ""),
@@ -62,26 +58,55 @@ class DeezerRadioClient(private val api: DeezerApi, private val parser: DeezerPa
                 )
             )
         }
-    }
+    }.toFeed()
 
-    fun radio(track: Track, context: EchoMediaItem?): Radio {
-
-        return try {
-            when (context) {
-                null -> {
-                    Radio(
-                        id = track.id,
-                        title = track.title,
-                        cover = track.cover,
-                        extras = mapOf(
-                            "radio" to "track"
-                        )
+    suspend fun radio(item: EchoMediaItem, context: EchoMediaItem?): Radio {
+        when(item) {
+            is Artist -> {
+                return Radio(
+                    id = item.id,
+                    title = item.name,
+                    cover = item.cover,
+                    extras = mapOf(
+                        "radio" to "artist"
                     )
-                }
-
-                is EchoMediaItem.Lists.RadioItem -> {
-                    when (context.radio.extras["radio"]) {
-                        "track" -> {
+                )
+            }
+            is Album -> {
+                val jsonObject = api.album(item)
+                val resultsObject = jsonObject["results"]!!.jsonObject
+                val songsObject = resultsObject["SONGS"]!!.jsonObject
+                val lastTrack = parser.run { songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack() }
+                return Radio(
+                    id = lastTrack.id,
+                    title = lastTrack.title,
+                    cover = lastTrack.cover,
+                    extras = mapOf(
+                        "radio" to "album",
+                        "artist" to lastTrack.artists[0].id
+                    )
+                )
+            }
+            is Playlist -> {
+                val jsonObject = api.playlist(item)
+                val resultsObject = jsonObject["results"]!!.jsonObject
+                val songsObject = resultsObject["SONGS"]!!.jsonObject
+                val lastTrack = parser.run { songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack() }
+                return Radio(
+                    id = lastTrack.id,
+                    title = lastTrack.title,
+                    cover = lastTrack.cover,
+                    extras = mapOf(
+                        "radio" to "playlist",
+                        "artist" to lastTrack.artists[0].id
+                    )
+                )
+            }
+            is Track -> {
+                return try {
+                    val track = item
+                    when (context) {
+                        null -> {
                             Radio(
                                 id = track.id,
                                 title = track.title,
@@ -92,117 +117,90 @@ class DeezerRadioClient(private val api: DeezerApi, private val parser: DeezerPa
                             )
                         }
 
-                        "artist" -> {
+                        is Radio -> {
+                            when (context.extras["radio"]) {
+                                "track" -> {
+                                    Radio(
+                                        id = track.id,
+                                        title = track.title,
+                                        cover = track.cover,
+                                        extras = mapOf(
+                                            "radio" to "track"
+                                        )
+                                    )
+                                }
+
+                                "artist" -> {
+                                    Radio(
+                                        id = context.id,
+                                        title = context.title,
+                                        cover = context.cover,
+                                        extras = mapOf(
+                                            "radio" to "artist"
+                                        )
+                                    )
+                                }
+
+                                "playlist", "album" -> {
+                                    Radio(
+                                        id = track.id,
+                                        title = track.title,
+                                        cover = track.cover,
+                                        extras = mapOf(
+                                            ("radio" to context.extras["radio"].orEmpty()),
+                                            "artist" to track.artists[0].id
+                                        )
+                                    )
+                                }
+
+                                else -> {
+                                    context
+                                }
+                            }
+                        }
+
+                        is Artist -> {
                             Radio(
-                                id = context.radio.id,
-                                title = context.radio.title,
-                                cover = context.radio.cover,
+                                id = context.id,
+                                title = context.name,
+                                cover = context.cover,
                                 extras = mapOf(
                                     "radio" to "artist"
                                 )
                             )
                         }
 
-                        "playlist", "album" -> {
+                        is Playlist -> {
                             Radio(
                                 id = track.id,
                                 title = track.title,
                                 cover = track.cover,
                                 extras = mapOf(
-                                    ("radio" to context.radio.extras["radio"].orEmpty()),
+                                    "radio" to "playlist",
                                     "artist" to track.artists[0].id
                                 )
                             )
                         }
 
-                        else -> {
-                            context.radio
+                        is Album -> {
+                            Radio(
+                                id = track.id,
+                                title = track.title,
+                                cover = track.cover,
+                                extras = mapOf(
+                                    "radio" to "album",
+                                    "artist" to track.artists[0].id
+                                )
+                            )
                         }
+
+                        else -> throw Exception("Radio Error")
                     }
+                } catch (e: Exception) {
+                    error("No Radio")
                 }
-
-                is EchoMediaItem.Profile.ArtistItem -> {
-                    Radio(
-                        id = context.artist.id,
-                        title = context.artist.name,
-                        cover = context.artist.cover,
-                        extras = mapOf(
-                            "radio" to "artist"
-                        )
-                    )
-                }
-
-                is EchoMediaItem.Lists.PlaylistItem -> {
-                    Radio(
-                        id = track.id,
-                        title = track.title,
-                        cover = track.cover,
-                        extras = mapOf(
-                            "radio" to "playlist",
-                            "artist" to track.artists[0].id
-                        )
-                    )
-                }
-
-                is EchoMediaItem.Lists.AlbumItem -> {
-                    Radio(
-                        id = track.id,
-                        title = track.title,
-                        cover = track.cover,
-                        extras = mapOf(
-                            "radio" to "album",
-                            "artist" to track.artists[0].id
-                        )
-                    )
-                }
-
-                else -> throw Exception("Radio Error")
             }
-        } catch (e: Exception) {
-            error("No Radio")
+            is Radio -> TODO()
         }
-    }
-
-    suspend fun radio(album: Album): Radio {
-        val jsonObject = api.album(album)
-        val resultsObject = jsonObject["results"]!!.jsonObject
-        val songsObject = resultsObject["SONGS"]!!.jsonObject
-        val lastTrack = parser.run { songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack() }
-        return Radio(
-            id = lastTrack.id,
-            title = lastTrack.title,
-            cover = lastTrack.cover,
-            extras = mapOf(
-                "radio" to "album",
-                "artist" to lastTrack.artists[0].id
-            )
-        )
-    }
-
-    suspend fun radio(playlist: Playlist): Radio {
-        val jsonObject = api.playlist(playlist)
-        val resultsObject = jsonObject["results"]!!.jsonObject
-        val songsObject = resultsObject["SONGS"]!!.jsonObject
-        val lastTrack = parser.run { songsObject["data"]!!.jsonArray.reversed()[0].jsonObject.toTrack() }
-        return Radio(
-            id = lastTrack.id,
-            title = lastTrack.title,
-            cover = lastTrack.cover,
-            extras = mapOf(
-                "radio" to "playlist",
-                "artist" to lastTrack.artists[0].id
-            )
-        )
-    }
-
-    fun radio(artist: Artist): Radio {
-        return Radio(
-            id = artist.id,
-            title = artist.name,
-            cover = artist.cover,
-            extras = mapOf(
-                "radio" to "artist"
-            )
-        )
     }
 }

@@ -6,18 +6,19 @@ import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.User
+import dev.brahmkshatriya.echo.extension.DeezerSession.DeezerCredentials
 import dev.brahmkshatriya.echo.extension.api.DeezerAlbum
 import dev.brahmkshatriya.echo.extension.api.DeezerArtist
 import dev.brahmkshatriya.echo.extension.api.DeezerMedia
 import dev.brahmkshatriya.echo.extension.api.DeezerPlaylist
 import dev.brahmkshatriya.echo.extension.api.DeezerRadio
 import dev.brahmkshatriya.echo.extension.api.DeezerSearch
+import dev.brahmkshatriya.echo.extension.api.DeezerShow
 import dev.brahmkshatriya.echo.extension.api.DeezerTrack
 import dev.brahmkshatriya.echo.extension.api.DeezerUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
@@ -32,8 +33,8 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.internal.commonEmptyRequestBody
 import java.io.InputStream
 import java.math.BigInteger
 import java.net.InetSocketAddress
@@ -53,6 +54,9 @@ class DeezerApi(private val session: DeezerSession) {
             ignoreUnknownKeys = true
             useArrayPolymorphism = true
         }
+
+        private const val APP_API_KEY =
+            "4VCYIJUCDLOUELGD1V8WBVYBNVDYOXEWSLLZDONGBBDFVXTZJRXPR29JRLQFO6ZE"
     }
 
     private val language: String
@@ -141,6 +145,13 @@ class DeezerApi(private val session: DeezerSession) {
         }.build()
     }
 
+    private val staticAppHeaders: Headers by lazy {
+        Headers.Builder().apply {
+            add("Content-Type", "application/json")
+            add("User-Agent", "Deezer/8.0.44.4 (Android; 12; Mobile; us) Google sdk_gphone64_x86_64")
+        }.build()
+    }
+
     private fun getHeaders(method: String? = ""): Headers {
         return staticHeaders.newBuilder().apply {
             if (method != "user.getArl") {
@@ -209,7 +220,7 @@ class DeezerApi(private val session: DeezerSession) {
                         } else {
                             session.isArlExpired(false)
                             val userList = DeezerExtension().onLogin("userPass", mapOf(Pair("email", email), Pair("pass", pass)))
-                            DeezerExtension().onSetLoginUser(userList.first())
+                            DeezerExtension().setLoginUser(userList.first())
                             return@withContext callApi(method, paramsBuilder, gatewayInput)
                         }
                     }
@@ -219,6 +230,34 @@ class DeezerApi(private val session: DeezerSession) {
                 }
             }
             result
+        }
+    }
+
+    suspend fun callAppApi(
+        method: String,
+        paramsBuilder: JsonObjectBuilder.() -> Unit = {}
+    ): JsonObject = withContext(Dispatchers.IO) {
+        val url = HttpUrl.Builder()
+            .scheme("https").host("api.deezer.com")
+            .addPathSegments("1.0/gateway.php")
+            .addQueryParameter("api_key", APP_API_KEY)
+            .addQueryParameter("sid", sid)
+            .addQueryParameter("method", method)
+            .addQueryParameter("output", "3")
+            .addQueryParameter("input", "3")
+            .build()
+
+        val requestBody =  encodeJson(paramsBuilder).toRequestBody()
+        val request = Request.Builder()
+            .url(url)
+            .post(requestBody)
+            .headers(staticAppHeaders)
+            .build()
+
+        clientNP.newCall(request).await().use { response ->
+            response.body.source().let {
+                decodeJsonStream(it.inputStream())
+            }
         }
     }
 
@@ -389,30 +428,19 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Shows =============>
 
-    suspend fun show(album: Album): JsonObject {
-        return callApi(
-            method = "deezer.pageShow",
-            paramsBuilder = {
-                put("country", language.substringAfter("-"))
-                put("lang", langCode)
-                put("nb", album.tracks)
-                put("show_id", album.id)
-                put("start", 0)
-                put("user_id", userId)
-            }
-        )
-    }
+    private val deezerShow by lazy { DeezerShow(this) }
 
-    suspend fun getShows(): JsonObject {
-        return callApi(
-            method = "deezer.pageProfile",
-            paramsBuilder = {
-                put("user_id", userId)
-                put("tab", "podcasts")
-                put("nb", 2000)
-            }
-        )
-    }
+    suspend fun show(album: Album): JsonObject = deezerShow.show(album, language, userId)
+
+    suspend fun getShows(): JsonObject = deezerShow.getShows(userId)
+
+    suspend fun addFavoriteShow(id: String) = deezerShow.addFavoriteShow(id)
+
+    suspend fun removeFavoriteShow(id: String) = deezerShow.removeFavoriteShow(id)
+
+    suspend fun getBookmarkedEpisodes() = deezerShow.getBookmarkedEpisodes(userId)
+
+    suspend fun bookmarkEpisode(id: String, offset: Long, duration: Double) = deezerShow.bookmarkEpisode(id, offset, duration)
 
     //<============= Playlists =============>
 
@@ -466,7 +494,7 @@ class DeezerApi(private val session: DeezerSession) {
     suspend fun lyrics(id: String): JsonObject {
         val request = Request.Builder()
             .url("https://auth.deezer.com/login/arl?jo=p&rto=c&i=c")
-            .post(commonEmptyRequestBody)
+            .post(RequestBody.EMPTY)
             .headers(Headers.headersOf("Cookie", "arl=$arl; sid=$sid"))
             .build()
         val response = clientNP.newCall(request).await()

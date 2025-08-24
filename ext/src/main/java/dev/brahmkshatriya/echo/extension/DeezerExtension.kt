@@ -2,36 +2,35 @@ package dev.brahmkshatriya.echo.extension
 
 import dev.brahmkshatriya.echo.common.clients.AlbumClient
 import dev.brahmkshatriya.echo.common.clients.ArtistClient
-import dev.brahmkshatriya.echo.common.clients.ArtistFollowClient
+import dev.brahmkshatriya.echo.common.clients.FollowClient
 import dev.brahmkshatriya.echo.common.clients.HomeFeedClient
 import dev.brahmkshatriya.echo.common.clients.LibraryFeedClient
+import dev.brahmkshatriya.echo.common.clients.LikeClient
 import dev.brahmkshatriya.echo.common.clients.LoginClient
 import dev.brahmkshatriya.echo.common.clients.LyricsClient
 import dev.brahmkshatriya.echo.common.clients.PlaylistClient
 import dev.brahmkshatriya.echo.common.clients.PlaylistEditClient
+import dev.brahmkshatriya.echo.common.clients.QuickSearchClient
 import dev.brahmkshatriya.echo.common.clients.RadioClient
-import dev.brahmkshatriya.echo.common.clients.SaveToLibraryClient
+import dev.brahmkshatriya.echo.common.clients.SaveClient
 import dev.brahmkshatriya.echo.common.clients.SearchFeedClient
 import dev.brahmkshatriya.echo.common.clients.ShareClient
 import dev.brahmkshatriya.echo.common.clients.TrackClient
-import dev.brahmkshatriya.echo.common.clients.TrackLikeClient
 import dev.brahmkshatriya.echo.common.clients.TrackerClient
 import dev.brahmkshatriya.echo.common.helpers.ClientException
-import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.helpers.WebViewRequest
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
 import dev.brahmkshatriya.echo.common.models.Feed
 import dev.brahmkshatriya.echo.common.models.Lyrics
+import dev.brahmkshatriya.echo.common.models.NetworkRequest
+import dev.brahmkshatriya.echo.common.models.NetworkRequest.Companion.toGetRequest
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.QuickSearchItem
 import dev.brahmkshatriya.echo.common.models.Radio
-import dev.brahmkshatriya.echo.common.models.Request
-import dev.brahmkshatriya.echo.common.models.Request.Companion.toRequest
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Streamable
-import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.models.TrackDetails
 import dev.brahmkshatriya.echo.common.models.User
@@ -61,17 +60,17 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClient,
-    SearchFeedClient, AlbumClient, ArtistClient, ArtistFollowClient, PlaylistClient, LyricsClient, ShareClient,
+class DeezerExtension : HomeFeedClient, TrackClient, LikeClient, RadioClient,
+    SearchFeedClient, QuickSearchClient,AlbumClient, ArtistClient, FollowClient, PlaylistClient, LyricsClient, ShareClient,
     TrackerClient, LoginClient.WebView, LoginClient.CustomInput,
-    LibraryFeedClient, PlaylistEditClient, SaveToLibraryClient {
+    LibraryFeedClient, PlaylistEditClient, SaveClient {
 
     private val session by lazy { DeezerSession.getInstance() }
     private val api by lazy { DeezerApi(session) }
     private val parser by lazy { DeezerParser(session) }
 
-    override val settingItems: List<Setting>
-        get() = listOf(
+    override suspend fun getSettingItems(): List<Setting> {
+        return listOf(
             SettingList(
                 "Use Proxy",
                 "proxy",
@@ -144,6 +143,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
                 )
             )
         )
+    }
 
     override fun setSettings(settings: Settings) {
         session.settings = settings
@@ -157,17 +157,13 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     private val deezerHomeFeedClient by lazy { DeezerHomeFeedClient(this, api, parser) }
 
-    override suspend fun getHomeTabs(): List<Tab> = listOf()
-
-    override fun getHomeFeed(tab: Tab?): Feed = deezerHomeFeedClient.getHomeFeed(shelf)
+    override suspend fun loadHomeFeed(): Feed<Shelf> = deezerHomeFeedClient.loadHomeFeed(shelf)
 
     //<============= Library =============>
 
     private val deezerLibraryClient by lazy { DeezerLibraryClient(this, api, parser) }
 
-    override suspend fun getLibraryTabs(): List<Tab> = deezerLibraryClient.getLibraryTabs()
-
-    override fun getLibraryFeed(tab: Tab?): Feed = deezerLibraryClient.getLibraryFeed(tab)
+    override suspend fun loadLibraryFeed(): Feed<Shelf> = deezerLibraryClient.loadLibraryFeed()
 
     override suspend fun addTracksToPlaylist(
         playlist: Playlist,
@@ -191,7 +187,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
     override suspend fun createPlaylist(title: String, description: String?): Playlist {
         handleArlExpiration()
         val jsonObject = api.createPlaylist(title, description)
-        val id = jsonObject["results"]?.jsonPrimitive?.content ?: ""
+        val id = jsonObject["results"]?.jsonPrimitive?.content.orEmpty()
         val playlist = Playlist(
             id = id,
             title = title,
@@ -215,12 +211,33 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         api.updatePlaylist(playlist.id, title, description)
     }
 
-    override suspend fun likeTrack(track: Track, isLiked: Boolean) {
+    override suspend fun likeItem(item: EchoMediaItem, shouldLike: Boolean) {
         handleArlExpiration()
-        if (isLiked) {
-            api.addFavoriteTrack(track.id)
-        } else {
-            api.removeFavoriteTrack(track.id)
+        when(item) {
+            is Track -> {
+                if (shouldLike) {
+                    api.addFavoriteTrack(item.id)
+                } else {
+                    api.removeFavoriteTrack(item.id)
+                }
+            }
+            else -> {}
+        }
+    }
+
+    override suspend fun isItemLiked(item: EchoMediaItem): Boolean {
+        when(item) {
+            is Track -> {
+                val dataArray = api.getTracks()["results"]?.jsonObject
+                    ?.get("data")?.jsonArray ?: return false
+
+                val trackIds = dataArray.mapNotNull { it.jsonObject["SNG_ID"]?.jsonPrimitive?.content }.toSet()
+                return item.id in trackIds
+            }
+
+            else -> {
+                return false
+            }
         }
     }
 
@@ -254,25 +271,29 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         api.updatePlaylistOrder(playlist.id, idArray)
     }
 
-    override suspend fun isSavedToLibrary(mediaItem: EchoMediaItem): Boolean {
-        return when (mediaItem) {
-            is EchoMediaItem.Lists.AlbumItem -> {
-                isItemSaved(api::getAlbums, "ALB_ID", mediaItem.album.id)
+    override suspend fun isItemSaved(item: EchoMediaItem): Boolean {
+        return when (item) {
+            is Album -> {
+                if (item.type == Album.Type.Show) {
+                    getIsItemSaved(api::getShows, "SHOW_ID", item.id)
+                } else {
+                    getIsItemSaved(api::getAlbums, "ALB_ID", item.id)
+                }
             }
 
-            is EchoMediaItem.Lists.PlaylistItem -> {
-                isItemSaved(api::getPlaylists, "PLAYLIST_ID", mediaItem.playlist.id)
+            is Playlist -> {
+                getIsItemSaved(api::getPlaylists, "PLAYLIST_ID", item.id)
             }
 
-            is EchoMediaItem.TrackItem -> {
-                isItemSaved(api::getTracks, "SNG_ID", mediaItem.track.id)
+            is Track -> {
+                getIsItemSaved(api::getTracks, "SNG_ID", item.id)
             }
 
             else -> false
         }
     }
 
-    private suspend fun isItemSaved(
+    private suspend fun getIsItemSaved(
         getItems: suspend () -> JsonObject,
         idKey: String,
         itemId: String
@@ -292,19 +313,27 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         }
     }
 
-    override suspend fun saveToLibrary(mediaItem: EchoMediaItem, save: Boolean) {
-        when (mediaItem) {
-            is EchoMediaItem.Lists.AlbumItem -> {
-                if (save) api.addFavoriteAlbum(mediaItem.album.id) else api.removeFavoriteAlbum(mediaItem.album.id)
+    override suspend fun saveToLibrary(item: EchoMediaItem, shouldSave: Boolean) {
+        when (item) {
+            is Album -> {
+                if (item.type == Album.Type.Show) {
+                    if (shouldSave) api.addFavoriteShow(item.id) else api.removeFavoriteShow(
+                        item.id
+                    )
+                } else {
+                    if (shouldSave) api.addFavoriteAlbum(item.id) else api.removeFavoriteAlbum(
+                        item.id
+                    )
+                }
 
             }
 
-            is EchoMediaItem.Lists.PlaylistItem -> {
-                if (save) api.addFavoritePlaylist(mediaItem.playlist.id) else api.removeFavoritePlaylist(mediaItem.playlist.id)
+            is Playlist -> {
+                if (shouldSave) api.addFavoritePlaylist(item.id) else api.removeFavoritePlaylist(item.id)
             }
 
-            is EchoMediaItem.TrackItem -> {
-                if (save) api.addFavoriteTrack(mediaItem.track.id) else api.removeFavoriteTrack(mediaItem.track.id)
+            is Track -> {
+                if (shouldSave) api.addFavoriteTrack(item.id) else api.removeFavoriteTrack(item.id)
             }
 
             else -> {}
@@ -317,13 +346,9 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun quickSearch(query: String): List<QuickSearchItem.Query> = deezerSearchClient.quickSearch(query)
 
-    override fun searchFeed(query: String, tab: Tab?): Feed = deezerSearchClient.searchFeed(query, tab, shelf)
+    override suspend fun deleteQuickSearch(item: QuickSearchItem) = api.deleteSearchHistory()
 
-    override suspend fun searchTabs(query: String): List<Tab> = deezerSearchClient.searchTabs(query)
-
-    override suspend fun deleteQuickSearch(item: QuickSearchItem) {
-        api.deleteSearchHistory()
-    }
+    override suspend fun loadSearchFeed(query: String): Feed<Shelf> = deezerSearchClient.loadSearchFeed(query, shelf)
 
     suspend fun channelFeed(target: String): List<Shelf> {
         val jsonObject = api.page(target.substringAfter("/"))
@@ -347,27 +372,19 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media = deezerTrackClient.loadStreamableMedia(streamable)
 
-    override suspend fun loadTrack(track: Track): Track = deezerTrackClient.loadTrack(track)
+    override suspend fun loadTrack(track: Track, isDownload: Boolean): Track = deezerTrackClient.loadTrack(track)
 
-    override fun getShelves(track: Track): PagedData<Shelf> = getShelves(track.artists.first())
+    override suspend fun loadFeed(track: Track): Feed<Shelf> = loadFeed(track.artists.first())
 
     //<============= Radio =============>
 
     private val deezerRadioClient by lazy { DeezerRadioClient(api, parser) }
 
-    override fun loadTracks(radio: Radio): PagedData<Track> = deezerRadioClient.loadTracks(radio)
+    override suspend fun loadTracks(radio: Radio): Feed<Track> = deezerRadioClient.loadTracks(radio)
 
-    override suspend fun radio(track: Track, context: EchoMediaItem?): Radio = deezerRadioClient.radio(track, context)
+    override suspend fun radio(item: EchoMediaItem, context: EchoMediaItem?): Radio = deezerRadioClient.radio(item, context)
 
-    override suspend fun radio(album: Album): Radio = deezerRadioClient.radio(album)
-
-    override suspend fun radio(playlist: Playlist): Radio = deezerRadioClient.radio(playlist)
-
-    override suspend fun radio(artist: Artist): Radio = deezerRadioClient.radio(artist)
-
-    override suspend fun radio(user: User): Radio {
-        TODO("Not Planned")
-    }
+    override suspend fun loadRadio(radio: Radio): Radio  = radio
 
     //<============= Lyrics =============>
 
@@ -375,38 +392,42 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun loadLyrics(lyrics: Lyrics): Lyrics = lyrics
 
-    override fun searchTrackLyrics(clientId: String, track: Track): PagedData.Single<Lyrics> = deezerLyricsClient.searchTrackLyrics(track)
+    override suspend fun searchTrackLyrics(clientId: String, track: Track): Feed<Lyrics> = deezerLyricsClient.searchTrackLyrics(track)
 
     //<============= Album =============>
 
     private val deezerAlbumClient by lazy { DeezerAlbumClient(this, api, parser) }
 
-    override fun getShelves(album: Album): PagedData.Single<Shelf> = getShelves(album.artists.first())
+    override suspend fun loadFeed(album: Album): Feed<Shelf> = loadFeed(album.artists.first())
 
     override suspend fun loadAlbum(album: Album): Album = deezerAlbumClient.loadAlbum(album)
 
-    override fun loadTracks(album: Album): PagedData<Track> = deezerAlbumClient.loadTracks(album)
+    override suspend fun loadTracks(album: Album): Feed<Track> = deezerAlbumClient.loadTracks(album)
 
     //<============= Playlist =============>
 
     private val deezerPlaylistClient by lazy { DeezerPlaylistClient(this, api, parser) }
 
-    override fun getShelves(playlist: Playlist): PagedData.Single<Shelf> = deezerPlaylistClient.getShelves(playlist)
+    override suspend fun loadFeed(playlist: Playlist): Feed<Shelf> = deezerPlaylistClient.getShelves(playlist)
 
     override suspend fun loadPlaylist(playlist: Playlist): Playlist = deezerPlaylistClient.loadPlaylist(playlist)
 
-    override fun loadTracks(playlist: Playlist): PagedData<Track> = deezerPlaylistClient.loadTracks(playlist)
+    override suspend fun loadTracks(playlist: Playlist): Feed<Track> = deezerPlaylistClient.loadTracks(playlist)
 
     //<============= Artist =============>
 
     private val deezerArtistClient by lazy { DeezerArtistClient(this, api, parser) }
 
-    override fun getShelves(artist: Artist): PagedData.Single<Shelf> = deezerArtistClient.getShelves(artist)
+    override suspend fun loadFeed(artist: Artist): Feed<Shelf> = deezerArtistClient.getShelves(artist)
 
     override suspend fun loadArtist(artist: Artist): Artist = deezerArtistClient.loadArtist(artist)
 
-    override suspend fun followArtist(artist: Artist, follow: Boolean) {
-        if (follow) api.followArtist(artist.id) else api.unfollowArtist(artist.id)
+    override suspend fun isFollowing(item: EchoMediaItem): Boolean = deezerArtistClient.isFollowing(item)
+
+    override suspend fun getFollowersCount(item: EchoMediaItem): Long? = deezerArtistClient.getFollowersCount(item)
+
+    override suspend fun followItem(item: EchoMediaItem, shouldFollow: Boolean) {
+        if (shouldFollow) api.followArtist(item.id) else api.unfollowArtist(item.id)
     }
 
     //<============= Login =============>
@@ -417,13 +438,21 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
     }
 
     override val webViewRequest = object : WebViewRequest.Headers<List<User>> {
-        override suspend fun onStop(requests: List<Request>): List<User> {
-            val data = requests.first().headers
+        override suspend fun onStop(requests: List<NetworkRequest>): List<User> {
+            val request = requests.first()
+            val data = request.headers
             val arl = extractCookieValue(data, "arl")
             val sid = extractCookieValue(data, "sid")
             if (arl != null && sid != null) {
                 session.updateCredentials(arl = arl, sid = sid)
-                return api.makeUser()
+                val credJObj = api.decodeJson(request.body?.decodeToString()!!)
+                val mail = credJObj["MAIL"]?.jsonPrimitive?.content!!
+                val pass = credJObj["PASSWORD"]?.jsonPrimitive?.content!!
+                session.updateCredentials(
+                    email = mail,
+                    pass = pass
+                )
+                return api.makeUser(mail, pass)
             } else if (data.isEmpty()) {
                 throw Exception("Ignore this")
             } else {
@@ -431,7 +460,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
             }
         }
 
-        override val initialUrl = "https://www.deezer.com/login?redirect_type=page&redirect_link=%2Faccount%2F".toRequest(
+        override val initialUrl = "https://www.deezer.com/login?redirect_type=page&redirect_link=%2Faccount%2F".toGetRequest(
             mapOf(
                 Pair(
                     "user-agent",
@@ -441,7 +470,6 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         )
 
         override val interceptUrlRegex = "https://www\\.deezer\\.com/ajax/gw-light\\.php\\?method=deezer_userAuth.*".toRegex()
-
 
         override val stopUrlRegex = "https://www\\.deezer\\.com/account/.*".toRegex()
 
@@ -504,7 +532,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
         }
     }
 
-    override suspend fun onSetLoginUser(user: User?) {
+    override fun setLoginUser(user: User?) {
         if (user != null) {
             session.updateCredentials(
                 arl = user.extras["arl"] ?: "",
@@ -532,24 +560,33 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
 
     override suspend fun onShare(item: EchoMediaItem): String {
         return when (item) {
-            is EchoMediaItem.TrackItem -> "https://www.deezer.com/track/${item.id}"
-            is EchoMediaItem.Profile.ArtistItem -> "https://www.deezer.com/artist/${item.id}"
-            is EchoMediaItem.Profile.UserItem -> "https://www.deezer.com/profile/${item.id}"
-            is EchoMediaItem.Lists.AlbumItem -> "https://www.deezer.com/album/${item.id}"
-            is EchoMediaItem.Lists.PlaylistItem -> "https://www.deezer.com/playlist/${item.id}"
-            is EchoMediaItem.Lists.RadioItem -> TODO("Does not exist")
+            is Track -> "https://www.deezer.com/track/${item.id}"
+            is Artist -> "https://www.deezer.com/artist/${item.id}"
+            //is EchoMediaItem.Profile.UserItem -> "https://www.deezer.com/profile/${item.id}"
+            is Album -> "https://www.deezer.com/album/${item.id}"
+            is Playlist -> "https://www.deezer.com/playlist/${item.id}"
+            is Radio -> TODO("Does not exist")
         }
     }
 
     //<============= Tracking =============>
-
-    override suspend fun onMarkAsPlayed(details: TrackDetails) {}
 
     override suspend fun onTrackChanged(details: TrackDetails?) {
         if (details != null) {
             if (log) {
                 api.log(details.track)
             }
+        }
+    }
+
+    override suspend fun onPlayingStateChanged(details: TrackDetails?, isPlaying: Boolean) {
+        val track = details?.track
+        if (track?.type == Track.Type.Podcast && !isPlaying) {
+            api.bookmarkEpisode(
+                track.id,
+                details.currentPosition.div(1000),
+                details.totalDuration?.div(1000)?.toDouble() ?: 0.0
+            )
         }
     }
 
@@ -566,8 +603,8 @@ class DeezerExtension : HomeFeedClient, TrackClient, TrackLikeClient, RadioClien
     }
 
     private val shelf: String get() = session.settings?.getString("shelf") ?: DEFAULT_TYPE
-    private val log: Boolean get() = session.settings?.getBoolean("log") ?: false
-    private val history: Boolean get() = session.settings?.getBoolean("history") ?: true
+    private val log: Boolean get() = session.settings?.getBoolean("log") == true
+    private val history: Boolean get() = session.settings?.getBoolean("history") != false
 
     companion object {
         private const val DEFAULT_TYPE = "grid"

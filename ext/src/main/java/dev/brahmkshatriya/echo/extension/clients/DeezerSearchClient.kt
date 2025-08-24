@@ -3,6 +3,7 @@ package dev.brahmkshatriya.echo.extension.clients
 import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Feed
 import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeedData
 import dev.brahmkshatriya.echo.common.models.QuickSearchItem
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Tab
@@ -57,35 +58,40 @@ class DeezerSearchClient(private val deezerExtension: DeezerExtension, private v
         }
     }
 
-    fun searchFeed(query: String, tab: Tab?, shelf: String): Feed = PagedData.Single {
+    suspend fun loadSearchFeed(query: String, shelf: String): Feed<Shelf> {
         deezerExtension.handleArlExpiration()
-        query.ifBlank { return@Single browseFeed(shelf) }
+        query.ifBlank { return browseFeed(shelf).toFeed() }
 
         if (history) {
             api.setSearchHistory(query)
         }
-        oldSearch?.takeIf { it.first == query && (tab == null || tab.id == "All") }?.second?.let {
-            return@Single it
-        }
 
-        if (tab?.id == "TOP_RESULT") return@Single emptyList()
+        return Feed(loadSearchFeedTabs(query)) { tab ->
+            if (tab?.id == "TOP_RESULT") return@Feed emptyList<Shelf>().toFeedData()
 
-        val jsonObject = api.search(query)
-        val resultObject = jsonObject["results"]?.jsonObject
-
-        val processSearchResults: (JsonObject) -> List<Shelf> = { resultObj ->
-            val tabObject = resultObj[tab?.id ?: ""]?.jsonObject
-            val dataArray = tabObject?.get("data")?.jsonArray
-
-            dataArray?.mapNotNull { item ->
-                parser.run {
-                    item.jsonObject.toEchoMediaItem()?.toShelf()
+            if (tab?.id == "All") {
+                oldSearch?.takeIf { it.first == query }?.second.let {
+                    return@Feed it?.toFeedData()!!
                 }
-            } ?: emptyList()
-        }
+            }
 
-        processSearchResults(resultObject ?: JsonObject(emptyMap()))
-    }.toFeed()
+            val jsonObject = api.search(query)
+            val resultObject = jsonObject["results"]?.jsonObject
+
+            val processSearchResults: (JsonObject) -> List<Shelf> = { resultObj ->
+                val tabObject = resultObj[tab?.id ?: ""]?.jsonObject
+                val dataArray = tabObject?.get("data")?.jsonArray
+
+                dataArray?.mapNotNull { item ->
+                    parser.run {
+                        item.jsonObject.toEchoMediaItem()?.toShelf()
+                    }
+                } ?: emptyList()
+            }
+
+            return@Feed processSearchResults(resultObject ?: JsonObject(emptyMap())).toFeedData()
+        }
+    }
 
     private suspend fun browseFeed(shelf: String): List<Shelf> {
         deezerExtension.handleArlExpiration()
@@ -111,14 +117,15 @@ class DeezerSearchClient(private val deezerExtension: DeezerExtension, private v
                                 ?: return@run null
                         val list = secShelf.list
                         Shelf.Lists.Items(
+                            id = secShelf.id,
                             title = secShelf.title,
                             subtitle = secShelf.subtitle,
                             type = Shelf.Lists.Type.Linear,
-                            more = PagedData.Single {
+                            more = PagedData.Single<Shelf> {
                                 list.map {
-                                    it
+                                    it.toShelf()
                                 }
-                            },
+                            }.toFeed(),
                             list = list
                         )
                     }
@@ -129,7 +136,7 @@ class DeezerSearchClient(private val deezerExtension: DeezerExtension, private v
         }
     }
 
-    suspend fun searchTabs(query: String): List<Tab> {
+    suspend fun loadSearchFeedTabs(query: String): List<Tab> {
         deezerExtension.handleArlExpiration()
         query.ifBlank { return emptyList() }
 

@@ -1,8 +1,7 @@
 package dev.brahmkshatriya.echo.extension.clients
 
-import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Feed
-import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeedData
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Tab
 import dev.brahmkshatriya.echo.extension.DeezerApi
@@ -17,9 +16,8 @@ import kotlinx.serialization.json.jsonObject
 
 class DeezerLibraryClient(private val deezerExtension: DeezerExtension, private val api: DeezerApi, private val parser: DeezerParser) {
 
-    private var allTabs: Pair<String, List<Shelf>>? = null
-
     private val tabs = listOf(
+        Tab("all", "All"),
         Tab("playlists", "Playlists"),
         Tab("albums", "Albums"),
         Tab("tracks", "Tracks"),
@@ -27,10 +25,10 @@ class DeezerLibraryClient(private val deezerExtension: DeezerExtension, private 
         Tab("shows", "Podcasts")
     )
 
-    suspend fun getLibraryTabs(): List<Tab> {
+    suspend fun loadLibraryFeedAll(): List<Shelf>? {
         deezerExtension.handleArlExpiration()
 
-        allTabs = "all" to supervisorScope {
+        return supervisorScope {
             tabs.map { tab ->
                 async(Dispatchers.Default) {
                     val jsonObject = when (tab.id) {
@@ -59,25 +57,23 @@ class DeezerLibraryClient(private val deezerExtension: DeezerExtension, private 
                 }
             }.mapNotNull { it.await() }
         }
-
-        return listOf(Tab("all", "All")) + tabs
     }
 
-    fun getLibraryFeed(tab: Tab?): Feed = PagedData.Single {
+    suspend fun loadLibraryFeed(): Feed<Shelf> {
         deezerExtension.handleArlExpiration()
 
-        val tabId = tab?.id ?: "all"
-        val list = when (tabId) {
-            "all" -> allTabs?.second ?: emptyList()
-            "playlists" -> fetchData { api.getPlaylists() }
-            "albums" -> fetchData { api.getAlbums() }
-            "tracks" -> fetchData { api.getTracks() }
-            "artists" -> fetchData { api.getArtists() }
-            "shows" -> fetchData { api.getShows() }
-            else -> emptyList()
+        return Feed(tabs) { tab ->
+            when (tab?.id) {
+                "all" -> loadLibraryFeedAll() ?: emptyList()
+                "playlists" -> fetchData { api.getPlaylists() }
+                "albums" -> fetchData { api.getAlbums() }
+                "tracks" -> fetchData { api.getTracks() }
+                "artists" -> fetchData { api.getArtists() }
+                "shows" -> fetchData { api.getShows() }
+                else -> emptyList()
+            }.toFeedData()
         }
-        list
-    }.toFeed()
+    }
 
     private suspend fun fetchData(apiCall: suspend () -> JsonObject): List<Shelf> {
         val jsonObject = apiCall()

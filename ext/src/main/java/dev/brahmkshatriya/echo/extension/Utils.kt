@@ -2,7 +2,6 @@ package dev.brahmkshatriya.echo.extension
 
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.Cipher
@@ -15,6 +14,8 @@ object Utils {
     private val keySpecCache = ConcurrentHashMap<String, SecretKeySpec>()
 
     private val md5Digest: MessageDigest by lazy { MessageDigest.getInstance("MD5") }
+
+    private val charset = Charsets.ISO_8859_1
 
     private fun bitwiseXor(vararg values: Char): Char {
         return values.fold(0) { acc, char -> acc xor char.code }.toChar()
@@ -31,12 +32,12 @@ object Utils {
 
     private fun getSecretKeySpec(blowfishKey: String): SecretKeySpec {
         return keySpecCache.computeIfAbsent(blowfishKey) {
-            SecretKeySpec(blowfishKey.toByteArray(Charsets.ISO_8859_1), "Blowfish")
+            SecretKeySpec(blowfishKey.toByteArray(charset), "Blowfish")
         }
     }
 
     private fun String.toMD5(): String {
-        return md5Digest.digest(toByteArray(Charsets.ISO_8859_1)).joinToString("") { "%02x".format(it) }
+        return md5Digest.digest(toByteArray(charset)).joinToString("") { "%02x".format(it) }
     }
 
     fun decryptBlowfish(chunk: ByteArray, blowfishKey: String): ByteArray {
@@ -59,6 +60,7 @@ object Utils {
  * Seems Deezer ditched this way of getting songs.
  * Will leave it for now.
  */
+/*
 @Suppress("NewApi", "GetInstance")
 fun generateTrackUrl(trackId: String, md5Origin: String, mediaVersion: String, quality: Int): String {
     val magicByte = 164
@@ -101,4 +103,4 @@ fun generateTrackUrl(trackId: String, md5Origin: String, mediaVersion: String, q
     }
 
     return "https://e-cdns-proxy-${md5Origin[0]}.dzcdn.net/mobile/1/$encryptedHex"
-}
+}*/

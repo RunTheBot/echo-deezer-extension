@@ -17,7 +17,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 class DeezerHomeFeedClient(private val deezerExtension: DeezerExtension, private val api: DeezerApi, private val parser: DeezerParser) {
 
-    fun getHomeFeed(shelf: String): Feed = PagedData.Single {
+    fun loadHomeFeed(shelf: String): Feed<Shelf> = PagedData.Single {
         deezerExtension.handleArlExpiration()
         val homePageResults = api.page("home")["results"]?.jsonObject
         val homeSections = homePageResults?.get("sections")?.jsonArray ?: JsonArray(emptyList())

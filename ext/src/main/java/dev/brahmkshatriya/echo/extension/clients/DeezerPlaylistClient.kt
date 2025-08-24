@@ -1,6 +1,8 @@
 package dev.brahmkshatriya.echo.extension.clients
 
 import dev.brahmkshatriya.echo.common.helpers.PagedData
+import dev.brahmkshatriya.echo.common.models.Feed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
 import dev.brahmkshatriya.echo.common.models.Playlist
 import dev.brahmkshatriya.echo.common.models.Shelf
 import dev.brahmkshatriya.echo.common.models.Track
@@ -12,7 +14,7 @@ import kotlinx.serialization.json.jsonObject
 
 class DeezerPlaylistClient(private val deezerExtension: DeezerExtension, private val api: DeezerApi, private val parser: DeezerParser) {
 
-    fun getShelves(playlist: Playlist): PagedData.Single<Shelf> = PagedData.Single {
+    fun getShelves(playlist: Playlist): Feed<Shelf> = PagedData.Single {
         /*DeezerExtension().handleArlExpiration()
         val jsonObject = api.playlist(playlist)
         val resultsObject = jsonObject["results"]!!.jsonObject
@@ -24,8 +26,8 @@ class DeezerPlaylistClient(private val deezerExtension: DeezerExtension, private
             }
         }
         //data*/
-        emptyList()
-    }
+        emptyList<Shelf>()
+    }.toFeed()
 
     suspend fun loadPlaylist(playlist: Playlist): Playlist {
         deezerExtension.handleArlExpiration()
@@ -34,7 +36,7 @@ class DeezerPlaylistClient(private val deezerExtension: DeezerExtension, private
         return parser.run { resultsObject.toPlaylist() }
     }
 
-    fun loadTracks(playlist: Playlist): PagedData<Track> = PagedData.Single {
+    fun loadTracks(playlist: Playlist): Feed<Track> = PagedData.Single {
         deezerExtension.handleArlExpiration()
         val jsonObject = api.playlist(playlist)
         val dataArray = jsonObject["results"]!!.jsonObject["SONGS"]!!.jsonObject["data"]!!.jsonArray
@@ -48,5 +50,5 @@ class DeezerPlaylistClient(private val deezerExtension: DeezerExtension, private
                 )
             )
         }
-    }
+    }.toFeed()
 }

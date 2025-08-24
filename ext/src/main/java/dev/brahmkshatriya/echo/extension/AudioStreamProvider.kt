@@ -9,8 +9,23 @@ import okhttp3.internal.closeQuietly
 import java.io.BufferedInputStream
 import java.io.FilterInputStream
 import java.io.InputStream
+import java.util.Collections
 
 object AudioStreamProvider {
+
+    private val bufferPool = Collections.synchronizedList(
+        mutableListOf<ByteArray>()
+    )
+
+    private fun getBuffer(size: Int): ByteArray {
+        return bufferPool.removeFirstOrNull() ?: ByteArray(size)
+    }
+
+    private fun returnBuffer(buffer: ByteArray) {
+        if (bufferPool.size < 10) {
+            bufferPool.add(buffer)
+        }
+    }
 
     suspend fun openStream(
         streamable: Streamable,
@@ -21,6 +36,7 @@ object AudioStreamProvider {
         val blockSize = 2048L
         val alignedStart = startByte - (startByte % blockSize)
         val dropBytes = (startByte % blockSize).toInt()
+
         val rangeHeader = if (endByte < 0) {
             "bytes=$alignedStart-"
         } else {
@@ -43,26 +59,26 @@ object AudioStreamProvider {
 
         val rawStream = response.body.byteStream()
 
-        return@withContext BufferedInputStream(object : FilterInputStream(rawStream) {
+        BufferedInputStream(object : FilterInputStream(rawStream) {
             private var blockCounter = alignedStart / blockSize
             private var toDrop = dropBytes
+            private val tempBuffer = getBuffer(blockSize.toInt())
 
             override fun read(buf: ByteArray, off: Int, len: Int): Int {
                 val chunkSize = blockSize.toInt().coerceAtMost(len)
-                val temp = ByteArray(chunkSize)
                 var totalRead = 0
 
                 while (totalRead < chunkSize) {
-                    val r = `in`.read(temp, totalRead, chunkSize - totalRead)
+                    val r = `in`.read(tempBuffer, totalRead, chunkSize - totalRead)
                     if (r == -1) break
                     totalRead += r
                 }
                 if (totalRead == 0) return -1
 
                 val processed = if (totalRead == chunkSize && blockCounter % 3 == 0L) {
-                    Utils.decryptBlowfish(temp, key)
+                    Utils.decryptBlowfish(tempBuffer, key)
                 } else {
-                    temp
+                    tempBuffer
                 }
                 blockCounter++
 
@@ -76,6 +92,12 @@ object AudioStreamProvider {
                 System.arraycopy(processed, startIdx, buf, off, toCopy)
                 return toCopy
             }
-        }, blockSize.toInt())
+
+            override fun close() {
+                super.close()
+                returnBuffer(tempBuffer)
+            }
+
+        }, blockSize.toInt() * 4)
     }
 }

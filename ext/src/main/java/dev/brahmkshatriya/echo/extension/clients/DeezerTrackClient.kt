@@ -27,7 +27,7 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
         return source["url"]?.jsonPrimitive?.content
     }
 
-    private suspend fun createStreamableForQuality(track: Track, quality: String): Streamable? {
+    private suspend fun createStreamableForQuality(track: Track, quality: String): Streamable {
         return try {
             val currentTrackId = track.id
             val mediaJson =
@@ -43,12 +43,12 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
                 mediaJson.toString().contains("Track token has no sufficient rights on requested media") || mediaIsEmpty -> {
                     val fallbackParsed = track.copy(id = track.extras["FALLBACK_ID"].orEmpty())
                     val fallbackMediaJson = api.getMediaUrl(fallbackParsed, quality)
-                    val url = extractUrlFromJson(fallbackMediaJson) ?: return null
+                    val url = extractUrlFromJson(fallbackMediaJson)!!
                     url to fallbackParsed
                 }
 
                 else -> {
-                    val url = extractUrlFromJson(mediaJson) ?: return null
+                    val url = extractUrlFromJson(mediaJson)!!
                     url to null
                 }
             }
@@ -97,7 +97,7 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
                     "FALLBACK_ID" to streamable.extras["FALLBACK_ID"].orEmpty()
                 )
             )
-            createStreamableForQuality(newTrack, quality) ?: streamable
+            createStreamableForQuality(newTrack, quality)
         } else {
             streamable
         }
@@ -106,14 +106,12 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
             resolvedStreamable.id.toSource().toMedia()
         } else {
             val contentLength = Utils.getContentLength(resolvedStreamable.id, client)
-            Streamable.Source.Raw(
-                { start, _ ->
-                    Pair(
-                        AudioStreamProvider.openStream(resolvedStreamable, client, start),
-                        contentLength - start
-                    )
-                }
-            ).toMedia()
+            Streamable.InputProvider { start, _ ->
+                Pair(
+                    AudioStreamProvider.openStream(resolvedStreamable, client, start),
+                    contentLength - start
+                )
+            }.toSource(id = resolvedStreamable.id).toMedia()
         }
     }
 
@@ -122,11 +120,10 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
     suspend fun loadTrack(track: Track): Track {
         deezerExtension.handleArlExpiration()
 
-        if (track.extras["__TYPE__"] == "show") {
+        if (track.type == Track.Type.Podcast) {
             return track
         }
 
-        val originalTrackId = track.id
         val isMp3Misc = track.extras["FILESIZE_MP3_MISC"]?.let { it != "0" } ?: false
 
         val streamables = if (isMp3Misc) {
@@ -167,17 +164,8 @@ class DeezerTrackClient(private val deezerExtension: DeezerExtension, private va
             }
         }
         return track.copy(
-            isLiked = isTrackLiked(originalTrackId),
             streamables = streamables
         )
-    }
-
-    private suspend fun isTrackLiked(id: String): Boolean {
-        val dataArray = api.getTracks()["results"]?.jsonObject
-            ?.get("data")?.jsonArray ?: return false
-
-        val trackIds = dataArray.mapNotNull { it.jsonObject["SNG_ID"]?.jsonPrimitive?.content }.toSet()
-        return id in trackIds
     }
 
     private val placeholderPrefix = "dzp:"

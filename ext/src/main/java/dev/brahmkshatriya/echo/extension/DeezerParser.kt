@@ -1,10 +1,12 @@
 package dev.brahmkshatriya.echo.extension
 
-import dev.brahmkshatriya.echo.common.helpers.PagedData
 import dev.brahmkshatriya.echo.common.models.Album
 import dev.brahmkshatriya.echo.common.models.Artist
 import dev.brahmkshatriya.echo.common.models.Date as EchoDate
 import dev.brahmkshatriya.echo.common.models.EchoMediaItem
+import dev.brahmkshatriya.echo.common.models.Feed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeedData
 import dev.brahmkshatriya.echo.common.models.ImageHolder
 import dev.brahmkshatriya.echo.common.models.ImageHolder.Companion.toImageHolder
 import dev.brahmkshatriya.echo.common.models.Playlist
@@ -30,6 +32,7 @@ class DeezerParser(private val session: DeezerSession) {
         val list = itemsArray.mapObjects { it.toEchoMediaItem() }
         return if (list.isNotEmpty()) {
             Shelf.Lists.Items(
+                id = name,
                 title = name,
                 list = list
             )
@@ -41,6 +44,7 @@ class DeezerParser(private val session: DeezerSession) {
     fun JsonObject.toShelfItemsList(name: String = "Unknown"): Shelf? {
         val item = toEchoMediaItem() ?: return null
         return Shelf.Lists.Items(
+            id = name,
             title = name,
             list = listOf(item)
         )
@@ -50,6 +54,7 @@ class DeezerParser(private val session: DeezerSession) {
         val list = mapObjects { it.toEchoMediaItem() }
         return if (list.isNotEmpty()) {
             Shelf.Lists.Items(
+                id = name,
                 title = name,
                 list = list
             )
@@ -63,15 +68,14 @@ class DeezerParser(private val session: DeezerSession) {
         shelf: String,
         crossinline block: suspend (String) -> List<Shelf>
     ): Shelf.Lists.Categories {
-        val itemsArray = jsonObject["items"]?.jsonArray ?: return Shelf.Lists.Categories(name, emptyList())
+        val itemsArray = jsonObject["items"]?.jsonArray ?: return Shelf.Lists.Categories(name, name, emptyList())
         val listType = if (shelf.contains("grid")) Shelf.Lists.Type.Grid else Shelf.Lists.Type.Linear
         return Shelf.Lists.Categories(
+            id = name,
             title = name,
             list = itemsArray.take(6).mapNotNull { it.jsonObject.toShelfCategory(block) },
             type = listType,
-            more = PagedData.Single {
-                itemsArray.mapNotNull { it.jsonObject.toShelfCategory(block) }
-            }
+            more = itemsArray.mapNotNull { it.jsonObject.toShelfCategory(block) }.toFeed()
         )
     }
 
@@ -93,8 +97,11 @@ class DeezerParser(private val session: DeezerSession) {
         val title = data["title"]?.jsonPrimitive?.content.orEmpty()
         val target = this["target"]?.jsonPrimitive?.content.orEmpty()
         return Shelf.Category(
+            id = title,
             title = title,
-            items = PagedData.Single { block(target) },
+            feed = Feed(emptyList()) {
+                block(target).toFeedData()
+            }
         )
     }
 
@@ -102,13 +109,13 @@ class DeezerParser(private val session: DeezerSession) {
         val data = this["data"]?.jsonObject ?: this
         return data["__TYPE__"]?.jsonPrimitive?.content?.let { type ->
             when {
-                "playlist" in type -> EchoMediaItem.Lists.PlaylistItem(toPlaylist())
-                "album" in type -> EchoMediaItem.Lists.AlbumItem(toAlbum())
-                "song" in type -> EchoMediaItem.TrackItem(toTrack())
-                "artist" in type -> EchoMediaItem.Profile.ArtistItem(toArtist(isShelfItem = true))
-                "show" in type -> EchoMediaItem.Lists.AlbumItem(toShow())
-                "episode" in type -> EchoMediaItem.TrackItem(toEpisode())
-                "flow" in type -> EchoMediaItem.Lists.RadioItem(toRadio())
+                "playlist" in type -> toPlaylist()
+                "album" in type -> toAlbum()
+                "song" in type -> toTrack()
+                "artist" in type -> toArtist(isShelfItem = true)
+                "show" in type -> toShow()
+                "episode" in type -> toEpisode()
+                "flow" in type -> toRadio()
                 else -> null
             }
         }
@@ -118,23 +125,27 @@ class DeezerParser(private val session: DeezerSession) {
         val md5 = data["SHOW_ART_MD5"]?.jsonPrimitive?.content.orEmpty()
         return Album(
             id = data["SHOW_ID"]?.jsonPrimitive?.content.orEmpty(),
+            type = Album.Type.Show,
             title = data["SHOW_NAME"]?.jsonPrimitive?.content.orEmpty(),
             cover = getCover(md5, "talk", ),
-            tracks = this["EPISODES"]?.jsonObject?.get("total")?.jsonPrimitive?.int,
-            artists = listOf(Artist(id = "", name = "")),
+            trackCount = this["EPISODES"]?.jsonObject?.get("total")?.jsonPrimitive?.int?.toLong(),
+            artists = emptyList(),
             description = data["SHOW_DESCRIPTION"]?.jsonPrimitive?.content.orEmpty(),
             extras = mapOf("__TYPE__" to "show")
         )
     }
 
-    fun JsonObject.toEpisode(): Track = unwrapAnd { data ->
+    fun JsonObject.toEpisode(bookmark: Map<String?, Long?> = mapOf()): Track = unwrapAnd { data ->
         val md5 = data["SHOW_ART_MD5"]?.jsonPrimitive?.content.orEmpty()
         val title = data["EPISODE_TITLE"]?.jsonPrimitive?.content.orEmpty()
+        val id = data["EPISODE_ID"]?.jsonPrimitive?.content.orEmpty()
         return Track(
-            id = data["EPISODE_ID"]?.jsonPrimitive?.content.orEmpty(),
+            id = id,
             title = title,
+            type = Track.Type.Podcast,
             cover = getCover(md5, "talk"),
             duration = data["DURATION"]?.jsonPrimitive?.content?.toLongOrNull()?.times(1000),
+            playedDuration = bookmark[id]?.times(1000),
             streamables = listOf(
                 Streamable.server(
                     id = data["EPISODE_DIRECT_STREAM_URL"]?.jsonPrimitive?.content.orEmpty(),
@@ -161,7 +172,7 @@ class DeezerParser(private val session: DeezerSession) {
             id = data["ALB_ID"]?.jsonPrimitive?.content.orEmpty(),
             title = data["ALB_TITLE"]?.jsonPrimitive?.content.orEmpty(),
             cover = getCover(md5, "cover"),
-            tracks = tracks,
+            trackCount = tracks?.toLong(),
             artists = artistArray.map { artistObject ->
                 Artist(
                     id = artistObject.jsonObject["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
@@ -175,7 +186,7 @@ class DeezerParser(private val session: DeezerSession) {
         )
     }
 
-    fun JsonObject.toArtist(isFollowing: Boolean = false, isShelfItem: Boolean = false): Artist {
+    fun JsonObject.toArtist(isShelfItem: Boolean = false): Artist {
         val artistData = when {
             isShelfItem && this["data"]?.jsonObject == null -> this
             this["DATA"]?.jsonObject?.get("ART_BANNER") == null -> this["DATA"]?.jsonObject ?: this["data"]?.jsonObject ?: this
@@ -191,10 +202,11 @@ class DeezerParser(private val session: DeezerSession) {
             id = artistData["ART_ID"]?.jsonPrimitive?.content.orEmpty(),
             name = artistData["ART_NAME"]?.jsonPrimitive?.content.orEmpty(),
             cover = getCover(md5, "artist"),
-            followers = artistData["NB_FAN"]?.jsonPrimitive?.int,
-            description = description,
+            bio = description,
             subtitle = this["subtitle"]?.jsonPrimitive?.content,
-            isFollowing = isFollowing
+            extras = mapOf(
+                "followers" to artistData["NB_FAN"]?.jsonPrimitive?.int.toString()
+            )
         )
     }
 
@@ -221,9 +233,9 @@ class DeezerParser(private val session: DeezerSession) {
                 title = data["ALB_TITLE"]?.jsonPrimitive?.content.orEmpty(),
                 cover = getCover(md5, "cover")
             ),
-            albumNumber = data["TRACK_NUMBER"]?.jsonPrimitive?.content?.toLongOrNull(),
+            albumOrderNumber = data["TRACK_NUMBER"]?.jsonPrimitive?.content?.toLongOrNull(),
             albumDiscNumber = data["DISK_NUMBER"]?.jsonPrimitive?.content?.toLongOrNull(),
-            irsc = data["ISRC"]?.jsonPrimitive?.content,
+            isrc = data["ISRC"]?.jsonPrimitive?.content,
             isExplicit = data["EXPLICIT_LYRICS"]?.jsonPrimitive?.content == "1",
             extras = buildMap {
                 put("FALLBACK_ID", data["FALLBACK"]?.jsonObject?.get("SNG_ID")?.jsonPrimitive?.content.orEmpty())
@@ -249,7 +261,7 @@ class DeezerParser(private val session: DeezerSession) {
             description = data["DESCRIPTION"]?.jsonPrimitive?.content.orEmpty(),
             subtitle = this["subtitle"]?.jsonPrimitive?.content ?: if (tracks != null && cd != null) "$tracks Songs • $cd" else if(tracks != null) "$tracks Songs" else cd?.toString(),
             isEditable = userID?.contains(userSID) == true,
-            tracks = tracks,
+            trackCount = tracks?.toLong(),
             creationDate = cd,
         )
     }

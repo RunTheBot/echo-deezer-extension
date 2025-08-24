@@ -16,7 +16,7 @@ class DeezerPlaylist(private val deezerApi: DeezerApi) {
             paramsBuilder = {
                 put("playlist_id", playlist.id)
                 put ("lang", deezerApi.langCode, )
-                put("nb", playlist.tracks)
+                put("nb", playlist.trackCount)
                 put("tags", true)
                 put("start", 0)
             }

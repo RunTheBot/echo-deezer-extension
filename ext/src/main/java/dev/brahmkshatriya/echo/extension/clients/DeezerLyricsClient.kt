@@ -1,6 +1,8 @@
 package dev.brahmkshatriya.echo.extension.clients
 
 import dev.brahmkshatriya.echo.common.helpers.PagedData
+import dev.brahmkshatriya.echo.common.models.Feed
+import dev.brahmkshatriya.echo.common.models.Feed.Companion.toFeed
 import dev.brahmkshatriya.echo.common.models.Lyrics
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
@@ -12,7 +14,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 class DeezerLyricsClient(private val api: DeezerApi) {
 
-    fun searchTrackLyrics(track: Track): PagedData.Single<Lyrics> = PagedData.Single {
+    fun searchTrackLyrics(track: Track): Feed<Lyrics> = PagedData.Single {
         try {
             val jsonObject = api.lyrics(track.id)
             val dataObject = jsonObject["data"]!!.jsonObject
@@ -36,5 +38,5 @@ class DeezerLyricsClient(private val api: DeezerApi) {
         } catch (e: Exception) {
             emptyList()
         }
-    }
+    }.toFeed()
 }
