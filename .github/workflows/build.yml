@@ -50,14 +50,14 @@ jobs:
         with:
           path: ${{ env.APP_PATH }}
 
-      # - name: Create Release
-      #   uses: softprops/action-gh-release@v2
-      #   with:
-      #     make_latest: true
-      #     tag_name: ${{ env.VERSION }}
-      #     body_path: commit.txt
-      #     name: ${{ env.VERSION }}
-      #     files: ${{ env.APP_PATH }}
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: true
+          tag_name: ${{ env.VERSION }}
+          body_path: commit.txt
+          name: ${{ env.VERSION }}
+          files: ${{ env.APP_PATH }}
 
       # - name: Delete Old Releases
       #   uses: sgpublic/delete-release-action@master
