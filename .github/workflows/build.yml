@@ -50,31 +50,31 @@ jobs:
         with:
           path: ${{ env.APP_PATH }}
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          make_latest: true
-          tag_name: ${{ env.VERSION }}
-          body_path: commit.txt
-          name: ${{ env.VERSION }}
-          files: ${{ env.APP_PATH }}
+      # - name: Create Release
+      #   uses: softprops/action-gh-release@v2
+      #   with:
+      #     make_latest: true
+      #     tag_name: ${{ env.VERSION }}
+      #     body_path: commit.txt
+      #     name: ${{ env.VERSION }}
+      #     files: ${{ env.APP_PATH }}
 
-      - name: Delete Old Releases
-        uses: sgpublic/delete-release-action@master
-        with:
-          release-drop: true
-          release-keep-count: 2
-          release-drop-tag: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Delete Old Releases
+      #   uses: sgpublic/delete-release-action@master
+      #   with:
+      #     release-drop: true
+      #     release-keep-count: 2
+      #     release-drop-tag: true
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload APK to Discord
-        shell: bash
-        env:
-          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-        run: |
-          commit=$(jq -Rsa . <<< "${{ github.event.head_commit.message }}"  | tail -c +2 | head -c -2)
-          message=$(echo "@everyone **${{ env.VERSION }}**\n$commit")
-          curl -F "payload_json={\"content\":\"${message}\"}" \
-          -F "file=@${{ env.APP_PATH }}" \
-          ${{ env.WEBHOOK }}
+      # - name: Upload APK to Discord
+      #   shell: bash
+      #   env:
+      #     WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      #   run: |
+      #     commit=$(jq -Rsa . <<< "${{ github.event.head_commit.message }}"  | tail -c +2 | head -c -2)
+      #     message=$(echo "@everyone **${{ env.VERSION }}**\n$commit")
+      #     curl -F "payload_json={\"content\":\"${message}\"}" \
+      #     -F "file=@${{ env.APP_PATH }}" \
+      #     ${{ env.WEBHOOK }}
