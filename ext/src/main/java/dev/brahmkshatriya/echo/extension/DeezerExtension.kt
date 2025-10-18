@@ -107,6 +107,35 @@ class DeezerExtension : HomeFeedClient, TrackClient, LikeClient, RadioClient,
                 )
             ),
             SettingCategory(
+                "Deezer Proxy Settings",
+                "dz_proxy",
+                mutableListOf(
+                    SettingSwitch(
+                        "Use Deezer Proxy",
+                        "use_dz_proxy",
+                        "Use Deezer Proxy for streaming and downloads",
+                        false
+                    ),
+                    SettingList(
+                        "Deezer Proxy",
+                        "dz_proxy_address",
+                        "Choose your preferred Deezer Proxy for streaming and downloads",
+                        mutableListOf(
+                            "dzmedia.fly.dev",
+                            "lufts-dzmedia.fly.dev",
+                            "Custom Deezer Proxy"
+                        ),
+                        mutableListOf(
+                            "dzmedia.fly.dev",
+                            "lufts-dzmedia.fly.dev",
+                            "Custom Deezer Proxy"
+                        ),
+                        0
+                    )
+
+                )
+            ),
+            SettingCategory(
                 "Language & Country",
                 "langcount",
                 mutableListOf(
@@ -368,7 +397,7 @@ class DeezerExtension : HomeFeedClient, TrackClient, LikeClient, RadioClient,
 
     //<============= Play =============>
 
-    private val deezerTrackClient by lazy { DeezerTrackClient(this, api) }
+    private val deezerTrackClient by lazy { DeezerTrackClient(this, api, session) }
 
     override suspend fun loadStreamableMedia(streamable: Streamable, isDownload: Boolean): Streamable.Media = deezerTrackClient.loadStreamableMedia(streamable)
 

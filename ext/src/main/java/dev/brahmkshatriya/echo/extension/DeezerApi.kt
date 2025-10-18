@@ -370,7 +370,7 @@ class DeezerApi(private val session: DeezerSession) {
 
     //<============= Media =============>
 
-    private val deezerMedia by lazy { DeezerMedia(this, clientNP) }
+    private val deezerMedia by lazy { DeezerMedia(this, clientNP, session) }
 
     suspend fun getMP3MediaUrl(track: Track, is128: Boolean): JsonObject = deezerMedia.getMP3MediaUrl(track, arl, sid, licenseToken, is128)
 

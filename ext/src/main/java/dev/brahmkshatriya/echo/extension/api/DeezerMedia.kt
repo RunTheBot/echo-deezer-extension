@@ -3,6 +3,7 @@ package dev.brahmkshatriya.echo.extension.api
 import dev.brahmkshatriya.echo.common.helpers.ContinuationCallback.Companion.await
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.extension.DeezerApi
+import dev.brahmkshatriya.echo.extension.DeezerSession
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
@@ -15,7 +16,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-class DeezerMedia(private val deezerApi: DeezerApi, private val clientNP: OkHttpClient) {
+class DeezerMedia(private val deezerApi: DeezerApi, private val clientNP: OkHttpClient, private val session: DeezerSession) {
 
     suspend fun getMP3MediaUrl(track: Track, arl: String, sid: String, licenseToken: String, is128: Boolean): JsonObject {
         val headers = Headers.Builder().apply {
@@ -73,7 +74,7 @@ class DeezerMedia(private val deezerApi: DeezerApi, private val clientNP: OkHttp
         }.toRequestBody("application/json; charset=utf-8".toMediaType())
 
         val request = Request.Builder()
-            .url("https://dzmedia.fly.dev/get_url")
+            .url("https://${session.settings?.getString("dz_proxy_address")}/get_url")
             .post(requestBody)
             .build()
 
