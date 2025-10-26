@@ -252,7 +252,7 @@ class DeezerParser(private val session: DeezerSession) {
         val md5 = data["PLAYLIST_PICTURE"]?.jsonPrimitive?.content.orEmpty()
         val userID = data["PARENT_USER_ID"]?.jsonPrimitive?.content
         val userSID = session.credentials.userId
-        val tracks = this["SONGS"]?.jsonObject?.get("total")?.jsonPrimitive?.int
+        val tracks = this["NB_SONG"]?.jsonPrimitive?.int
         val cd = data["DATE_ADD"]?.jsonPrimitive?.content?.toDate()
         return Playlist(
             id = data["PLAYLIST_ID"]?.jsonPrimitive?.content.orEmpty(),
