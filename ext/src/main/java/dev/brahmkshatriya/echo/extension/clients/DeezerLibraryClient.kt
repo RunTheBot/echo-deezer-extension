@@ -71,7 +71,7 @@ class DeezerLibraryClient(private val deezerExtension: DeezerExtension, private 
                 "artists" -> fetchData { api.getArtists() }
                 "shows" -> fetchData { api.getShows() }
                 else -> emptyList()
-            }.toFeedData()
+            }.toFeedData(Feed.Buttons(showPlayAndShuffle = true))
         }
     }
 

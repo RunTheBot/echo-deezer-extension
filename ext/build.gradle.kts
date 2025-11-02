@@ -5,12 +5,6 @@ plugins {
     id("com.gradleup.shadow") version "9.0.2"
 }
 
-dependencies {
-    val libVersion: String by project
-    compileOnly("dev.brahmkshatriya.echo:common:$libVersion")
-    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.2.10")
-}
-
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
@@ -18,6 +12,12 @@ java {
 
 kotlin {
     jvmToolchain(17)
+}
+
+dependencies {
+    val libVersion: String by project
+    compileOnly("dev.brahmkshatriya.echo:common:$libVersion")
+    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.2.10")
 }
 
 val extType: String by project

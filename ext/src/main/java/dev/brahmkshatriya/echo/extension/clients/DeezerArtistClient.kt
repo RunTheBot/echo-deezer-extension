@@ -104,7 +104,7 @@ class DeezerArtistClient(private val deezerExtension: DeezerExtension, private v
             "ALBUMS" to { jObject ->
                 val shelf =
                     jObject["data"]?.jsonArray?.toShelfItemsList("Albums") as? Shelf.Lists.Items
-                val list = shelf?.list  ?: emptyList()
+                val list = shelf?.list ?: emptyList()
                 Shelf.Lists.Items(
                     id = shelf?.id.orEmpty(),
                     title = shelf?.title.orEmpty(),
